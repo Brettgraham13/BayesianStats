@@ -1,0 +1,5 @@
+"0","od2017 <-createODDF(game_stats_2017)"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"2","Unequal factor levels: coercing to character"
+"0","# View(od2017)"

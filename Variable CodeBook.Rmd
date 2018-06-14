@@ -1,0 +1,20 @@
+---
+title: "Variable Codebook"
+author: "Gunnar Goeden & Brett Graham"
+date: "12/17/2017"
+output: html_document
+---
+
+Variable                  |  Definition
+------------------------  |  ----------------------------------------------
+$y_{hi}$                  |  Home team final points scored in game i 
+$y_{ai}$                  |  Away team final points scored in game i
+$w_i$                     |  Binned weeks dividing each season into 3 uneven sections (early, mid, and late season)
+$hO_i$                    |  Home team's offensive score stat in game i
+$hD_i$                    |  Home team's defensive score stat in game i
+$aO_i$                    |  Away team's offensive score stat in game i
+$aD_i$                    |  Away team's defensive score stat in game i
+$hO_{i(y-1)}$             |  Home team's offensive score stat from last year
+$hD_{i(y-1)}$             |  Home team's defensive score stat from last year
+$aO_{i(y-1)}$             |  Away team's offensive score stat from last year
+$aD_{i(y-1)}$             |  Away team's defensive score stat from last year

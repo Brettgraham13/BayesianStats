@@ -1,0 +1,119 @@
+"0","# data_2014 <-simplify(game_stats_2016)"
+"0","# data_2015 <-simplify(game_stats_2016)"
+"0","# data_2016 <-simplify(game_stats_2016)"
+"0","# data_2017 <-simplify(game_stats_2016)"
+"0","modelDF2011 <- createModelDF(game_stats_2011,game_stats_2010)"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"2","`mutate_each()` is deprecated.
+Use `mutate_all()`, `mutate_at()` or `mutate_if()` instead.
+To map `funs` over a selection of variables, use `mutate_at()`
+"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"2","`mutate_each()` is deprecated.
+Use `mutate_all()`, `mutate_at()` or `mutate_if()` instead.
+To map `funs` over a selection of variables, use `mutate_at()`
+"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"2","`mutate_each()` is deprecated.
+Use `mutate_all()`, `mutate_at()` or `mutate_if()` instead.
+To map `funs` over a selection of variables, use `mutate_at()`
+"
+"0","modelDF2012 <- createModelDF(game_stats_2012,game_stats_2011)"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"2","`mutate_each()` is deprecated.
+Use `mutate_all()`, `mutate_at()` or `mutate_if()` instead.
+To map `funs` over a selection of variables, use `mutate_at()`
+"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"2","`mutate_each()` is deprecated.
+Use `mutate_all()`, `mutate_at()` or `mutate_if()` instead.
+To map `funs` over a selection of variables, use `mutate_at()`
+"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"2","`mutate_each()` is deprecated.
+Use `mutate_all()`, `mutate_at()` or `mutate_if()` instead.
+To map `funs` over a selection of variables, use `mutate_at()`
+"
+"0","modelDF2013 <- createModelDF(game_stats_2013,game_stats_2012)"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"2","`mutate_each()` is deprecated.
+Use `mutate_all()`, `mutate_at()` or `mutate_if()` instead.
+To map `funs` over a selection of variables, use `mutate_at()`
+"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"2","`mutate_each()` is deprecated.
+Use `mutate_all()`, `mutate_at()` or `mutate_if()` instead.
+To map `funs` over a selection of variables, use `mutate_at()`
+"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"2","`mutate_each()` is deprecated.
+Use `mutate_all()`, `mutate_at()` or `mutate_if()` instead.
+To map `funs` over a selection of variables, use `mutate_at()`
+"
+"0","modelDF2014 <- createModelDF(game_stats_2014,game_stats_2013)"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"2","`mutate_each()` is deprecated.
+Use `mutate_all()`, `mutate_at()` or `mutate_if()` instead.
+To map `funs` over a selection of variables, use `mutate_at()`
+"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"2","`mutate_each()` is deprecated.
+Use `mutate_all()`, `mutate_at()` or `mutate_if()` instead.
+To map `funs` over a selection of variables, use `mutate_at()`
+"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"2","`mutate_each()` is deprecated.
+Use `mutate_all()`, `mutate_at()` or `mutate_if()` instead.
+To map `funs` over a selection of variables, use `mutate_at()`
+"
+"0","modelDF2015 <- createModelDF(game_stats_2015,game_stats_2014)"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"2","`mutate_each()` is deprecated.
+Use `mutate_all()`, `mutate_at()` or `mutate_if()` instead.
+To map `funs` over a selection of variables, use `mutate_at()`
+"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"2","`mutate_each()` is deprecated.
+Use `mutate_all()`, `mutate_at()` or `mutate_if()` instead.
+To map `funs` over a selection of variables, use `mutate_at()`
+"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"2","`mutate_each()` is deprecated.
+Use `mutate_all()`, `mutate_at()` or `mutate_if()` instead.
+To map `funs` over a selection of variables, use `mutate_at()`
+"
+"0","modelDF2016 <- createModelDF(game_stats_2016,game_stats_2015)"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"2","`mutate_each()` is deprecated.
+Use `mutate_all()`, `mutate_at()` or `mutate_if()` instead.
+To map `funs` over a selection of variables, use `mutate_at()`
+"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"2","`mutate_each()` is deprecated.
+Use `mutate_all()`, `mutate_at()` or `mutate_if()` instead.
+To map `funs` over a selection of variables, use `mutate_at()`
+"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"2","`mutate_each()` is deprecated.
+Use `mutate_all()`, `mutate_at()` or `mutate_if()` instead.
+To map `funs` over a selection of variables, use `mutate_at()`
+"
+"0","# modelDF2017 <- createModelDF(game_stats_2017,game_stats_2016)"

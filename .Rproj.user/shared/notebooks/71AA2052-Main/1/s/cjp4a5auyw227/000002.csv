@@ -1,0 +1,13 @@
+"0","data_2016 <-simplify(game_stats_2016)"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"0","# View(data_2016)"
+"0","modelDF2016 <- createModelDF(game_stats_2016)"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"0","View(modelDF2016)"
+"0","# data_2015 <- simplify(game_stats_2015)"
+"0","# modelDF2015 <- createModelDF(game_stats_2015)"
+"0","# View(modelDF2015)"

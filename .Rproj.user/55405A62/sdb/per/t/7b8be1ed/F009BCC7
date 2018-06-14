@@ -1,0 +1,29 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1519683649162.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "F009BCC7",
+    "lastKnownWriteTime" : 322654800,
+    "last_content_update" : 1519683649162,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "E51180B0",
+        "caption" : "teamIDs2017",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=teamIDs2017&cache_key=E51180B0",
+        "displayedObservations" : 32,
+        "environment" : "",
+        "object" : "teamIDs2017",
+        "preview" : 0,
+        "totalObservations" : 32,
+        "variables" : 2
+    },
+    "relative_order" : 5,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_dataframe"
+}

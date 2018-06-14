@@ -1,0 +1,49 @@
+"0","library(tidyr)"
+"0","library(dplyr)"
+"0","library(ggplot2)"
+"0","library(lubridate)"
+"0","library(readr)"
+"2","
+Attaching package: ‘readr’
+
+"
+"2","The following object is masked from ‘package:rvest’:
+
+    guess_encoding
+
+"
+"0","library(igraph)"
+"2","
+Attaching package: ‘igraph’
+
+"
+"2","The following objects are masked from ‘package:lubridate’:
+
+    %--%, union
+
+"
+"2","The following objects are masked from ‘package:dplyr’:
+
+    %>%, as_data_frame, groups, union
+
+"
+"2","The following objects are masked from ‘package:tidyr’:
+
+    %>%, crossing
+
+"
+"2","The following object is masked from ‘package:rvest’:
+
+    %>%
+
+"
+"2","The following objects are masked from ‘package:stats’:
+
+    decompose, spectrum
+
+"
+"2","The following object is masked from ‘package:base’:
+
+    union
+
+"

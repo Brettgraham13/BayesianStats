@@ -1,0 +1,1 @@
+{"frames":[{"character_number":0,"end_character_number":0,"end_line_number":0,"file":"","func":"filter(modelDF2014, Week > 5)","line_number":0}],"message":"Error in filter(modelDF2014, Week > 5) : object 'modelDF2014' not found\n"}

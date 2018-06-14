@@ -1,0 +1,5 @@
+"0","set.seed(1000)"
+"0","main_predict1 = data.frame(predictmain1(.04045,0.04835,0))"
+"2","NAs produced"
+"0","colnames(main_predict1)[1]<- ""prediction"""
+"0","ggplot(main_predict1, aes(x=prediction)) + geom_histogram(aes(y=..density..))"

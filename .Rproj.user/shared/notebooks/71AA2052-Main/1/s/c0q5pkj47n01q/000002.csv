@@ -1,0 +1,2 @@
+"0","g = dataToGraph(data_2016,23,6)"
+"0","Adj = as.matrix(get.adjacency(g,attr='weight'))"

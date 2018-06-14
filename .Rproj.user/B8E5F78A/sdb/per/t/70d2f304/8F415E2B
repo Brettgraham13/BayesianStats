@@ -1,0 +1,21 @@
+{
+    "collab_server" : "",
+    "contents" : "---\ntitle: \"Variable Codebook\"\nauthor: \"Gunnar Goeden & Brett Graham\"\ndate: \"12/17/2017\"\noutput: html_document\n---\n\nVariable                  |  Definition\n------------------------  |  ----------------------------------------------\n$y_{hi}$                  |  Home team final points scored in game i \n$y_{ai}$                  |  Away team final points scored in game i\n$w_i$                     |  Binned weeks dividing each season into 3 uneven sections (early, mid, and late season)\n$hO_i$                    |  Home team's offensive score stat in game i\n$hD_i$                    |  Home team's defensive score stat in game i\n$aO_i$                    |  Away team's offensive score stat in game i\n$aD_i$                    |  Away team's defensive score stat in game i\n$hO_{i(y-1)}$             |  Home team's offensive score stat from last year\n$hD_{i(y-1)}$             |  Home team's defensive score stat from last year\n$aO_{i(y-1)}$             |  Away team's offensive score stat from last year\n$aD_{i(y-1)}$             |  Away team's defensive score stat from last year\n",
+    "created" : 1513529515794.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "717703264",
+    "id" : "8F415E2B",
+    "lastKnownWriteTime" : 1513529562,
+    "last_content_update" : 1513529562115,
+    "path" : "/home/local/MAC/bgraham/BayesStats_Project/Variable CodeBook.Rmd",
+    "project_path" : "Variable CodeBook.Rmd",
+    "properties" : {
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 11,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}

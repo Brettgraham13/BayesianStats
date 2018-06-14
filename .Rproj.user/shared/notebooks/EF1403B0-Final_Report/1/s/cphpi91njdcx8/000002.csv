@@ -1,0 +1,6 @@
+"0","#Data filtered to later weeks to avoid noise"
+"0","modelData <-modelDF2015 %>% "
+"0","  bind_rows(modelDF2014) %>%"
+"0","  bind_rows(modelDF2013) %>%"
+"0","  bind_rows(modelDF2012) %>%"
+"0","  bind_rows(modelDF2011)"

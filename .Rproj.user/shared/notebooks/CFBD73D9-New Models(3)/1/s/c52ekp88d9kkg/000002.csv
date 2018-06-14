@@ -1,0 +1,4 @@
+"0","denver = teamPredictions(predict2017,""Denver"")"
+"2","Error in dataframe %>% subset(Home_Team == Team | Away_Team == Team) : 
+  could not find function ""%>%""
+"

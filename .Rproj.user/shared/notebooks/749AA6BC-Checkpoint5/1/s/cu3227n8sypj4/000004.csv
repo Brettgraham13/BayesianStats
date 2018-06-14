@@ -1,0 +1,3 @@
+"0","simple_predict = data.frame(predictsimple1(4,8))"
+"0","colnames(simple_predict)[1]<- ""prediction"""
+"0","ggplot(simple_predict, aes(x=prediction)) + geom_histogram(aes(y=..density..))"

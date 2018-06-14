@@ -1,0 +1,2 @@
+"0","# mean(predict2016$`score_accuracy`)"
+"0","ggplot(predict2016, aes(x=`score_accuracy`)) + geom_histogram(binwidth = 3, aes(y=..density..))"

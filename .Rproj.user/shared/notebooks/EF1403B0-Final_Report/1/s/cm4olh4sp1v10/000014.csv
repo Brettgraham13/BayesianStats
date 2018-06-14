@@ -1,0 +1,2 @@
+"0","ggplot(minnesota, aes(x= Week,y = `Point Differential`,color = Result)) +"
+"0","    geom_line() + geom_point()+ ggtitle(""Minnesota"")"

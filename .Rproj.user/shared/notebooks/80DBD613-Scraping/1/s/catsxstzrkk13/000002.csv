@@ -1,0 +1,8 @@
+"0","createDataframe <- function(year){"
+"0","  dateVect = createDateVector(year)"
+"0","  data_mat = yearlyStats(dateVect)"
+"0","  data_mat = data_mat[-1,]"
+"0","  game_stats <- data.frame(data_mat)"
+"0","  names(game_stats)[1:length(event_variables)] <- event_variables"
+"0","    "
+"0","}"

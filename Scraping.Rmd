@@ -1,0 +1,342 @@
+---
+title: "Scraping"
+author: "Brett Graham & Gunnar Goeden"
+date: "11/8/2017"
+output: html_document
+---
+
+### Notes:
+Need NFL game score data as follows:\
+week number, home/away teams, scores, rushing yards, rushing attempts, rushing td, rushing fumbles, passing yards, passing TD, passing attempts, passing completions.
+
+```{r}
+library(xml2)
+library(rvest)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+```
+
+
+https://www.rstudio.com/wp-content/uploads/2015/02/data-wrangling-cheatsheet.pdf
+
+#Questions:
+How to split numeric values scraped as "x-y-z" ?
+How to incorporate week into data table? (ie. How to say "all dates from 9/10/15 to 9/14/15 = week 1")
+
+##2015 Team & Score Data (first webpage)
+```{r}
+url2015 <- 'http://www.footballdb.com/games/index.html?lg=NFL&yr=2015'
+webpage2015 <- read_html(url2015)
+
+date15_html <- html_nodes(webpage2015,'td:nth-child(1) .hidden-xs')
+date15_data <- html_text(date15_html)
+
+visitteam15_html <- html_nodes(webpage2015,'td:nth-child(2) .hidden-xs')
+visitteam15_data <- html_text(visitteam15_html)
+
+visitscore15_html <- html_nodes(webpage2015,'#leftcol .center:nth-child(3)')
+visitscore15_data <- html_text(visitscore15_html)
+visitscore15_data <-as.numeric(visitscore15_data)
+
+hometeam15_html <- html_nodes(webpage2015,'.center+ td > .hidden-xs')
+hometeam15_data <- html_text(hometeam15_html)
+
+homescore15_html <- html_nodes(webpage2015,'.center:nth-child(5)')
+homescore15_data <- html_text(homescore15_html)
+homescore15_data <-as.numeric(homescore15_data)
+
+fbscores2015 <- data.frame(Date = date15_data, Visiting_Team = visitteam15_data, Visiting_Score = visitscore15_data, Home_Team = hometeam15_data, Home_Score = homescore15_data)
+#fbscores2015
+```
+
+##2016 Team & Score Data 
+```{r}
+url2016 <- 'http://www.footballdb.com/games/index.html?lg=NFL&yr=2016'
+webpage2016 <- read_html(url2016)
+
+date16_html <- html_nodes(webpage2016,'td:nth-child(1) .hidden-xs')
+date16_data <- html_text(date16_html)
+
+visitteam16_html <- html_nodes(webpage2016,'td:nth-child(2) .hidden-xs')
+visitteam16_data <- html_text(visitteam16_html)
+
+visitscore16_html <- html_nodes(webpage2016,'#leftcol .center:nth-child(3)')
+visitscore16_data <- html_text(visitscore16_html)
+visitscore16_data <-as.numeric(visitscore16_data)
+
+hometeam16_html <- html_nodes(webpage2016,'.center+ td > .hidden-xs')
+hometeam16_data <- html_text(hometeam16_html)
+
+homescore16_html <- html_nodes(webpage2016,'.center:nth-child(5)')
+homescore16_data <- html_text(homescore16_html)
+homescore16_data <-as.numeric(homescore16_data)
+
+fbscores2016 <- data.frame(Date = date16_data, Visiting_Team = visitteam16_data, Visiting_Score = visitscore16_data, Home_Team = hometeam16_data, Home_Score = homescore16_data)
+#fbscores2016
+```
+
+##2017 Team & Score Data 
+```{r}
+url2017 <- 'http://www.footballdb.com/games/index.html?lg=NFL&yr=2017'
+webpage2017 <- read_html(url2017)
+
+date17_html <- html_nodes(webpage2017,'td:nth-child(1) .hidden-xs')
+date17_data <- html_text(date17_html)
+date17_data <- as.Date(date17_data,"%m/%d/%Y")
+
+visitteam17_html <- html_nodes(webpage2017,'td:nth-child(2) .hidden-xs')
+visitteam17_data <- html_text(visitteam17_html)
+
+visitscore17_html <- html_nodes(webpage2017,'#leftcol .center:nth-child(3)')
+visitscore17_data <- html_text(visitscore17_html)
+visitscore17_data <-as.numeric(visitscore17_data)
+
+hometeam17_html <- html_nodes(webpage2017,'.center+ td > .hidden-xs')
+hometeam17_data <- html_text(hometeam17_html)
+
+homescore17_html <- html_nodes(webpage2017,'.center:nth-child(5)')
+homescore17_data <- html_text(homescore17_html)
+homescore17_data <-as.numeric(homescore17_data)
+
+fbscores2017 <- data.frame(Date = date17_data, Visiting_Team = visitteam17_data, Visiting_Score = visitscore17_data, Home_Team = hometeam17_data, Home_Score = homescore17_data)
+#fbscores2017
+```
+
+```{r}
+date_html <- html_nodes(webpage2017,'td:nth-child(1) .hidden-xs , .divheader')
+date_data <- html_text(date_html)
+#date_data
+
+week <- rep(0,256)
+if (date17_data >= "2017-09-14") week=1 else week=0
+mutate(fbscores2017, Week=week)
+
+#date17_data
+#week <- rep(0,50)
+
+```
+
+
+```{r}
+url <- "http://www.footballdb.com/games/boxscore.html?gid=2017091001"
+
+#Reading the HTML code from the website
+webpage <- read_html(url)
+
+title_data_html <- html_nodes(webpage,"#divBox_team tbody .left")
+title_data <- html_text(title_data_html)
+title_data <- append(c("Team", "Points"), title_data)
+
+# #Create boxscore 
+# boxscore <- data.frame(Category = title_data, Home = home_data, Away = away_data)
+
+#Create game event (single row that describes game)
+home_variables <- paste0(rep("Home_",length(title_data)),title_data)
+away_variables <- paste0(rep("Away_",length(title_data)),title_data)
+event_variables <- append(home_variables,away_variables)
+event_variables <- append(c("Date","Week"),event_variables)
+
+length(event_variables)
+
+```
+
+```{r}
+createDateVector <- function(year){
+  url <- paste0('http://www.footballdb.com/games/index.html?lg=NFL&yr=',toString(year))
+  webpage <- read_html(url)
+  date_html <- html_nodes(webpage,'td:nth-child(1) .hidden-xs')
+  date_data <- html_text(date_html)
+  dateVect <- as.Date(date_data,"%m/%d/%Y")
+  
+  today = today()
+  daysBeforeToday = dateVect <= today
+  dateVect = dateVect[daysBeforeToday]
+}
+```
+
+```{r}
+dateToURL <- function(dateVect, i, adjustment=0){
+  url_base <- 'http://www.footballdb.com/games/boxscore.html?gid='
+  url_year = year(dateVect[i])
+  if(month(dateVect[i])<10){
+    url_month <- paste0("0",month(dateVect[i]))
+  }else{
+    (url_month <-toString(month(dateVect[i])))
+   }
+  if(day(dateVect[i])<10){
+    url_day <- paste0("0",day(dateVect[i]))
+  }else{
+    url_day <-toString(day(dateVect[i]))
+  }
+  
+  gameNum = 1
+  location = i-1
+  if(location >0){
+    while(dateVect[i]==dateVect[location]){
+      gameNum = gameNum+1
+      location=location-1
+      
+      if(location==0){
+        break
+      }
+    }
+  }
+  
+  gameNum = gameNum + adjustment
+  
+  if(gameNum<10){
+    url_gamenum <- paste0("0",toString(gameNum))
+  }else{
+    url_gamenum <-toString(gameNum)
+  }
+
+  url <- paste0(url_base,url_year,url_month,url_day,toString(url_gamenum))
+
+  
+  return(list(url=url,url_year=url_year,url_month = url_month,url_day=url_day))
+}
+```
+```{r}
+yearlyStats <- function(dateVect){
+  data = matrix(rep('',length(event_variables)),nrow=1)
+  
+  for(i in 1:length(dateVect)){
+
+
+    url_info <- dateToURL(dateVect,i)
+    url <- url_info$url
+    
+    webpage <- read_html(url)
+  
+  
+    away_data_html <- html_nodes(webpage,'#divBox_team .row1 .left+ td , .section_left .left+ td .hidden-xs , #divBox_team .row0 .left+ td')
+    away_data <- html_text(away_data_html)
+    away_points <- html_text(html_nodes(webpage,'#leftcol .header+ .center td+ td b'))
+    away_data <- append(away_data,away_points, after = 1)
+  
+    home_data_html <- html_nodes(webpage,"#divBox_team .row1 .left~ td+ td , #divBox_team .row0 .left~ td+ td , .section_left .left~ td+ td .hidden-xs")
+    home_data <- html_text(home_data_html)
+    home_points <- html_text(html_nodes(webpage,'#leftcol .row0+ .center td+ td b'))
+    home_data <- append(home_data,home_points, after = 1)
+    
+    week_info <- html_text(html_nodes(webpage,'#breadcrumbs a~ a+ a'))
+  
+    date = paste0(url_info$url_month,"/",url_info$url_day,"/",url_info$url_year)
+    date = append(date,week_info)
+    game_data = append(date,home_data)
+    game_data = append(game_data,away_data)
+    
+    
+    
+    adjustment = 1
+    while(length(game_data)==2 |length(game_data)==1){
+      url <- dateToURL(dateVect,i,adjustment = adjustment)$url
+    
+      webpage <- read_html(url)
+    
+      away_data_html <- html_nodes(webpage,'#divBox_team .row1 .left+ td , .section_left .left+ td .hidden-xs , #divBox_team .row0 .left+ td')
+      away_data <- html_text(away_data_html)
+      away_points <- html_text(html_nodes(webpage,'#leftcol .header+ .center td+ td b'))
+      away_data <- append(away_data,away_points, after = 1)
+    
+      home_data_html <- html_nodes(webpage,"#divBox_team .row1 .left~ td+ td , #divBox_team .row0 .left~ td+ td , .section_left .left~ td+ td .hidden-xs")
+      home_data <- html_text(home_data_html)
+      home_points <- html_text(html_nodes(webpage,'#leftcol .row0+ .center td+ td b'))
+      home_data <- append(home_data,home_points, after = 1)
+      
+      week_info <- html_text(html_nodes(webpage,'#breadcrumbs a~ a+ a'))
+
+    
+      date = paste0(url_info$url_month,"/",url_info$url_day,"/",url_info$url_year)
+      date = append(date,week_info)
+      game_data = append(date,home_data)
+      game_data = append(game_data,away_data)
+    
+      adjustment = adjustment+1
+    
+    
+      if(adjustment >100){
+        print("ERROR: ADJUSTMENT TOO LARGE")
+        print(i)
+        break
+      }
+  
+    }
+    data = rbind(data,game_data)
+  
+  }
+  return(data)
+}
+```
+```{r}
+createDataframe <- function(year){
+  dateVect = createDateVector(year)
+  data_mat = yearlyStats(dateVect)
+  data_mat = data_mat[-1,]
+  game_stats <- data.frame(data_mat)
+  names(game_stats)[1:length(event_variables)] <- event_variables
+  names(game_stats)[c(12,40)] <- c('Home_Avg Rush Gain','Away_Avg Rush Gain')
+  return(game_stats)
+    
+}
+```
+```{r}
+createPredictionsDataFrame <- function(year){
+  url <- paste0('http://www.footballdb.com/games/index.html?lg=NFL&yr=',year)
+  webpage <- read_html(url)
+  
+  date_html <- html_nodes(webpage,'td:nth-child(1) .hidden-xs')
+  date_data <- html_text(date_html)
+  date_data <- as.Date(date_data,"%m/%d/%Y")
+  
+  visitteam_html <- html_nodes(webpage,'td:nth-child(2) .hidden-xs')
+  visitteam_data <- html_text(visitteam_html)
+  
+  visitscore_html <- html_nodes(webpage,'#leftcol .center:nth-child(3)')
+  visitscore_data <- html_text(visitscore_html)
+  visitscore_data <-as.numeric(visitscore_data)
+  
+  hometeam_html <- html_nodes(webpage,'.center+ td > .hidden-xs')
+  hometeam_data <- html_text(hometeam_html)
+  
+  homescore_html <- html_nodes(webpage,'.center:nth-child(5)')
+  homescore_data <- html_text(homescore_html)
+  homescore_data <-as.numeric(homescore_data)
+  
+  fbscores <- data.frame(Date = date_data, Home_Team = hometeam17_data, Home_Points = homescore17_data, Away_Team = visitteam17_data, Away_Points = visitscore17_data)
+  
+  return(fbscores)
+  
+}
+
+# View(createPredictionsDataFrame(2017))
+
+
+
+```
+
+
+```{r}
+# game_stats_2010 <- createDataframe(2010)
+# game_stats_2010<- game_stats_2010[-c(208,240),]
+# game_stats_2011 <- createDataframe(2011)
+# game_stats_2012 <- createDataframe(2012)
+# game_stats_2013 <- createDataframe(2013)
+# game_stats_2014 <- createDataframe(2014)
+# game_stats_2014<- game_stats_2014[-176,]
+# game_stats_2015 <- createDataframe(2015)
+# game_stats_2016 <- createDataframe(2016)
+game_stats_2017 <- createDataframe(2017)
+game_stats_2017 <- game_stats_2017[-159,]
+
+
+View(game_stats_2017)
+```
+
+
+
+
+
+

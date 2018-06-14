@@ -1,0 +1,4 @@
+"0","data_2016 <-simplify(game_stats_2016)"
+"2","extract_numeric() is deprecated: please use readr::parse_number() instead
+"
+"0","View(data_2016)"

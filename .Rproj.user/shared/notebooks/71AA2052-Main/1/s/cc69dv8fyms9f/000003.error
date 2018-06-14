@@ -1,0 +1,1 @@
+{"frames":[],"message":"Error: unexpected SPECIAL in:\n\"  modifiedData <- modifiedDatadf %>%  mutate_each_( funs(as.character(.)), names( .[,sapply(., is.factor)] ))\n %>%\"\n"}

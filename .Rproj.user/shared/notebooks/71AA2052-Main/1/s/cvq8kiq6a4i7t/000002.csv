@@ -1,0 +1,2 @@
+"0","denverData <- onlyTeam(data_2016,'Denver')"
+"0","View(denverData)"

@@ -1,0 +1,2 @@
+"0","final_sample <- data.frame(step=1:10000, final_sim[[1]])"
+"0","head(final_sample)"

@@ -1,0 +1,560 @@
+---
+title: "New Models(2)"
+author: "Brett Graham"
+date: "1/6/2018"
+output: html_document
+---
+```{r}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(readr)
+library(igraph)
+library(rjags)
+
+```
+
+
+```{r} 
+#Data filtered to later weeks to avoid noise
+
+modelData <-modelDF2016 %>%
+  bind_rows(modelDF2015) %>% 
+  bind_rows(modelDF2014) %>%
+  bind_rows(modelDF2013) %>%
+  bind_rows(modelDF2012) %>%
+  bind_rows(modelDF2011)
+
+testData <- modelDF2017
+```
+
+Goal:
+Create a model that predicts the score differential in a game
+
+```{r}
+final2 <- "model{
+  #Data
+  for(i in 1:length(H_pts)) {
+    H_pts[i] ~ dpois(H_lam[i] + h0[home[i]] + b00)
+    A_pts[i] ~ dpois(A_lam[i] + b00)
+  
+    log(H_lam[i]) <- b0 + b1[w[i]]*(h_O[i] - a_D[i]) + b2[w[i]]*(hprior_O[i] - aprior_D[i]) 
+    log(A_lam[i]) <- b0 + b1[w[i]]*(a_O[i] -h_D[i]) + b2[w[i]]*(aprior_O[i] - hprior_D[i]) 
+  }
+
+  #Modify the weighting on the relationship between current stats and the priors over time.
+  for(t in 1:3){
+    b1[t] ~ dnorm(1,1/10)
+    b2[t] ~ dnorm(1,1/10)
+
+  }
+
+  for(j in 1:32){
+    h0[j] ~ dnorm(hmu,1/htau)
+  }
+
+
+  #Priors
+  b00 ~ dnorm(0,1/10)
+  b0 ~ dnorm(0,1/10)
+  hmu ~ dnorm(3,1)
+  htau ~ dgamma(1,1/10)
+
+}"
+
+final2_jags <- jags.model(textConnection(final2),
+                              
+data= list(H_pts = modelData$Home_Points, A_pts = modelData$Away_Points,h_D= modelData$Home_D_Points , h_O= modelData$Home_O_Points , a_D= modelData$Away_D_Points , a_O= modelData$Away_O_Points,hprior_O = modelData$Home_O_Points_Last_Year,hprior_D = modelData$Home_D_Points_Last_Year,aprior_O = modelData$Away_O_Points_Last_Year,aprior_D = modelData$Away_D_Points_Last_Year, w = modelData$binnedWeeks, home = modelData$Home_id),
+
+inits=list(.RNG.name="base::Wichmann-Hill", .RNG.seed=1989))
+
+final2_sim <- coda.samples(final2_jags, variable.names=c("h0","b0","b1","b2","hmu","htau","b00"), n.iter=10000)
+
+final2_sample <- data.frame(step=1:10000, final2_sim[[1]])
+head(final2_sample)
+```
+```{r}
+summary(final2_sim)
+plot(final2_sim)
+```
+```{r}
+set.seed(13)
+single_prediction <- function(modelDFRow, predictionsDF){
+  home_impact = predictionsDF[,modelDFRow$Home_id + 9] 
+  if(modelDFRow$Week == 2){
+    home_impact = 0
+  }  
+  
+  home_pred = rpois(10000, predictionsDF$b00 +  home_impact + exp(predictionsDF$b0 + predictionsDF[,modelDFRow$binnedWeek + 2]*(modelDFRow$`Home_O_Points` - modelDFRow$`Away_D_Points`) + predictionsDF[,modelDFRow$binnedWeek + 5]*(modelDFRow$`Home_O_Points_Last_Year` - modelDFRow$`Away_D_Points_Last_Year`)))
+  
+  away_pred = rpois(10000,predictionsDF$b00 + exp(predictionsDF$b0 + predictionsDF[,modelDFRow$binnedWeek + 2]*(modelDFRow$`Away_O_Points` - modelDFRow$`Home_D_Points`) + predictionsDF[,modelDFRow$binnedWeek + 5]*(modelDFRow$`Away_O_Points_Last_Year` - modelDFRow$`Home_D_Points_Last_Year`)))
+  
+  return(list(score_diff = home_pred - away_pred, total_pts = home_pred + away_pred))           
+}
+
+all_predictions <- function(data, sampleDF){
+  score_diff_predictions = rep(0,nrow(data))
+  total_points_predictions = rep(0,nrow(data))
+  for(i in 1:nrow(data)){
+    prediction = single_prediction(data[i,],sampleDF)
+    score_diff_predictions[i] = round(mean(prediction$score_diff))
+    total_points_predictions[i] = round(mean(prediction$total_pts))
+  }
+  predictionsDF = data.frame(score_diff_predictions,total_points_predictions)
+
+  newDF = bind_cols(data,predictionsDF)
+  return(newDF)
+}
+```
+
+
+
+
+```{r}
+set.seed(13)
+
+predict2017 = all_predictions(testData, final2_sample)
+
+predict2017 <- predict2017 %>%
+  mutate(score_diff = Home_Points - Away_Points) %>%
+  mutate(score_accuracy = score_diff_predictions - score_diff) %>%
+  mutate(score_error = abs(score_accuracy)) %>%
+  mutate(total_pts = Home_Points + Away_Points) %>%
+  mutate(total_pts_accuracy = total_points_predictions - total_pts) %>%
+  mutate(total_error = abs(total_pts_accuracy)) %>%
+  select(Date,Week,Home_Team,Home_Points,Away_Team,Away_Points,contains('score'),contains('total'))
+
+onlyTeam <- function(dataframe,Team){
+  onlyTeamData <- dataframe %>%
+    subset(Home_Team == Team | Away_Team == Team)
+  return(onlyTeamData)
+}
+
+teamPredictions <- function(dataframe,team){
+  
+  teamData <- onlyTeam(dataframe, team)
+  
+  teamHome <- teamData %>%
+    subset(Home_Team == team) %>%
+    select(Week,Home_Team,7:10) %>%
+    rename(Team = Home_Team) %>%
+    mutate(team_score_diff_predictions = score_diff_predictions) %>%
+    mutate(team_score_diff = score_diff) %>%
+    mutate(team_score_accuracy = score_accuracy) %>%
+    select(Week,Team,contains("team"),score_error)
+
+  teamAway <- teamData %>%
+    subset(Away_Team == team) %>%
+    select(Week,Away_Team,7:10) %>%
+    rename(Team = Away_Team) %>%
+    mutate(team_score_diff_predictions = -1*score_diff_predictions) %>%
+    mutate(team_score_diff = -1*score_diff) %>%
+    mutate(team_score_accuracy = -1*score_accuracy) %>%
+    select(Week,Team,contains("team"),score_error)
+  
+  final2TeamData <- bind_rows(teamAway,teamHome) %>%
+    select(Week,Team,contains("score_diff"),-contains('accuracy')) %>%
+    arrange(Week) %>%
+    gather(Result, `Point Differential`,-Week,-Team)
+  
+  return(final2TeamData)
+}
+
+```
+
+# View(predict2017)
+
+```{r}
+
+# mean(predict2017$`score_accuracy`)
+ggplot(predict2017, aes(x=`score_accuracy`)) + geom_histogram(binwidth = 3, aes(y=..density..))
+ggplot(predict2017, aes(x=`total_pts_accuracy`)) + geom_histogram(binwidth = 3, aes(y=..density..))
+
+ggplot(predict2017, aes(x=`score_error`)) + geom_histogram(binwidth = 3, aes(y=..density..))
+ggplot(predict2017, aes(x=`total_error`)) + geom_histogram(binwidth = 3, aes(y=..density..))
+```
+```{r}
+mean(predict2017$score_error)
+mean(predict2017$total_error)
+
+mean(predict2017$score_accuracy)
+mean(predict2017$total_pts_accuracy)
+
+```
+
+```{r}
+denver = teamPredictions(predict2017,"Denver")
+newEngland = teamPredictions(predict2017,"New England")
+laRams = teamPredictions(predict2017,"LA Rams")
+carolina = teamPredictions(predict2017,"Carolina")
+chicago = teamPredictions(predict2017,"Chicago")
+greenBay = teamPredictions(predict2017,"Green Bay")
+newOrleans = teamPredictions(predict2017,"New Orleans")
+tennessee =  teamPredictions(predict2017,"Tennessee")
+oakland = teamPredictions(predict2017,"Oakland")
+minnesota = teamPredictions(predict2017,"Minnesota")
+cleveland = teamPredictions(predict2017,"Cleveland")
+atlanta = teamPredictions(predict2017,"Atlanta")
+dallas = teamPredictions(predict2017,"Dallas")
+jacksonville = teamPredictions(predict2017,"Jacksonville")
+
+
+
+
+
+
+
+
+
+
+ggplot(jacksonville, aes(x= Week,y = `Point Differential`,color = Result)) +
+    geom_line() + geom_point() + ggtitle("Jacksonville")
+
+ggplot(denver, aes(x= Week,y = `Point Differential`,color = Result)) +
+    geom_line() + geom_point() + ggtitle("Denver")
+
+ggplot(newEngland, aes(x= Week,y = `Point Differential`,color = Result)) +
+    geom_line() + geom_point()+ ggtitle("New England")
+
+ggplot(laRams, aes(x= Week,y = `Point Differential`,color = Result)) +
+    geom_line() + geom_point()+ ggtitle("Los Angeles Rams")
+
+ggplot(carolina, aes(x= Week,y = `Point Differential`,color = Result)) +
+    geom_line() + geom_point()+ ggtitle("Carolina")
+
+ggplot(chicago, aes(x= Week,y = `Point Differential`,color = Result)) +
+    geom_line() + geom_point()+ ggtitle("Chicago")
+
+ggplot(greenBay, aes(x= Week,y = `Point Differential`,color = Result)) +
+    geom_line() + geom_point()+ ggtitle("Green Bay")
+
+ggplot(newOrleans, aes(x= Week,y = `Point Differential`,color = Result)) +
+    geom_line() + geom_point()+ ggtitle("New Orleans")
+
+ggplot(tennessee, aes(x= Week,y = `Point Differential`,color = Result)) +
+    geom_line() + geom_point()+ ggtitle("Tennessee")
+
+ggplot(oakland, aes(x= Week,y = `Point Differential`,color = Result)) +
+    geom_line() + geom_point()+ ggtitle("Oakland")
+
+ggplot(minnesota, aes(x= Week,y = `Point Differential`,color = Result)) +
+    geom_line() + geom_point()+ ggtitle("Minnesota")
+
+ggplot(cleveland, aes(x= Week,y = `Point Differential`,color = Result)) +
+    geom_line() + geom_point()+ ggtitle("Cleveland")
+
+ggplot(atlanta, aes(x= Week,y = `Point Differential`,color = Result)) +
+    geom_line() + geom_point()+ ggtitle("Atlanta")
+
+ggplot(dallas, aes(x= Week,y = `Point Differential`,color = Result)) +
+    geom_line() + geom_point()+ ggtitle("Dallas")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+score_diff <- "model{
+  #Data
+  for(i in 1:length(H_pts)) {
+    H_pts[i] ~ dpois(H_lam[i])
+    A_pts[i] ~ dpois(A_lam[i])
+  
+    log(H_lam[i]) <- h0 + b0 + b1*h_O[i] + b2*a_D[i] + theta[h[i]]
+    log(A_lam[i]) <- b0 + b1*a_O[i] + b2*h_D[i] + theta[a[i]]
+  }
+  
+
+
+  # Hierarchical Component
+  for(j in 1:32){
+    theta[j] ~ dnorm(0,tau)
+  }
+
+  
+  
+  #Priors
+  tau ~ dgamma(1,1/10)
+  h0 ~ dnorm(3,1/10)
+
+  b0 ~ dnorm(0,1/10)
+  b1 ~ dnorm(1,1/10)
+  b2 ~ dnorm(1,1/10)
+
+}"
+
+score_diff_jags <- jags.model(textConnection(score_diff),
+                              
+data= list(H_pts = modelData$Home_Points, A_pts = modelData$Away_Points, h= modelData$Home_id, a= modelData$Away_id,h_D= modelData$Home_D_Points , h_O= modelData$Home_O_Points , a_D= modelData$Away_D_Points , a_O= modelData$Away_O_Points),
+
+inits=list(.RNG.name="base::Wichmann-Hill", .RNG.seed=1989))
+
+score_diff_sim <- coda.samples(score_diff_jags, variable.names=c("theta","tau","h0","b0","b1","b2"), n.iter=10000)
+   
+score_diff_sample <- data.frame(step=1:10000, score_diff_sim[[1]])
+head(score_diff_sample)
+```
+```{r}
+summary(score_diff_sim)
+plot(score_diff_sim)
+```
+```{r}
+set.seed(13)
+
+predictScoreDiff <- function(modelDFRow){
+  predictions = 
+    rpois(10000,exp(score_diff_sample$h0 + score_diff_sample$b0 + score_diff_sample$b1*modelDFRow$Home_O_Points + score_diff_sample$b2*modelDFRow$Away_D_Points + rnorm(score_diff_sample[,modelDFRow$Home_id + 6], sqrt(1/score_diff_sample$tau)))) - 
+    rpois(10000, exp(score_diff_sample$b0 + score_diff_sample$b1*modelDFRow$Away_O_Points + score_diff_sample$b2*modelDFRow$Home_D_Points + rnorm(score_diff_sample[,modelDFRow$Away_id + 6],sqrt(1/score_diff_sample$tau))))
+
+}
+
+comparePrediction <- function(modelDF){
+  accuracyVect = rep(0,nrow(modelDF))
+  for(i in 1:nrow(modelDF)){
+    scoreDiff = modelDF$Home_Points[i] - modelDF$Away_Points[i]
+    predictionsDF = data.frame(predictScoreDiff(modelDF[i,])) 
+    meanPredictions = round(mean(predictionsDF[,1]))
+    accuracyVect[i] = round(scoreDiff - meanPredictions)
+  }
+  accuracyDF = data.frame(accuracyVect,abs(accuracyVect))
+  colnames(accuracyDF)<- c("Prediction Accuracy","Error")
+  return(accuracyDF)
+}
+
+```
+```{r}
+predictions2016 = comparePrediction(modelDF2016)
+# View(predictions2016)
+
+mean(predictions2016$`Prediction Accuracy`)
+mean(predictions2016$Error)
+ggplot(predictions2016, aes(x=`Prediction Accuracy`)) + geom_histogram(binwidth = 3, aes(y=..density..))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+score_diff <- "model{
+  #Data
+  for(i in 1:length(H_pts)) {
+    H_pts[i] ~ dpois(h0 + H_lam[i])
+    A_pts[i] ~ dpois(A_lam[i])
+  
+    log(H_lam[i]) <- b0 + b1*h_O[i] + b2*a_D[i] + b3*h_OR[i] + b4*h_OP[i] + b5*a_DR[i] + b6*a_DP[i] + theta[h[i]]
+    log(A_lam[i]) <- b0 + b1*a_O[i] + b2*h_D[i] + b3*a_OR[i] + b4*a_OP[i] + b5*h_DR[i] + b6*h_DP[i] +theta[a[i]]
+  }
+  
+
+
+  # Hierarchical Component
+  for(j in 1:32){
+    theta[j] ~ dnorm(0,tau)
+  }
+
+  
+  
+  #Priors                                                                                                                       
+  tau ~ dgamma(1,1/10)
+  h0 ~ dnorm(3,1/10)
+
+  b0 ~ dnorm(0,1/10)
+  b1 ~ dnorm(5,1/10)
+  b2 ~ dnorm(-5,1/10)
+  b3 ~ dnorm(5,1/10)
+  b4 ~ dnorm(5,1/10)
+  b5 ~ dnorm(-5,1/10)
+  b6 ~ dnorm(-5,1/10)
+}"
+
+score_diff_jags <- jags.model(textConnection(score_diff),
+                              
+data= list(H_pts = modelData$Home_Points, A_pts = modelData$Away_Points, h= modelData$Home_id, a= modelData$Away_id,h_D= modelData$Home_D_Points , h_O= modelData$Home_O_Points , a_D= modelData$Away_D_Points , a_O= modelData$Away_O_Points, h_OR = modelData$`Home_O_Net Rush`, h_OP = modelData$`Home_D_Net Pass`, h_DR = modelData$`Home_D_Net Rush`, h_DP = modelData$`Home_D_Net Pass`, a_OR = modelData$`Away_O_Net Rush`, a_OP = modelData$`Away_O_Net Pass`, a_DR = modelData$`Away_D_Net Rush`, a_DP = modelData$`Away_D_Net Pass`),
+
+inits=list(.RNG.name="base::Wichmann-Hill", .RNG.seed=1989))
+
+score_diff_sim <- coda.samples(score_diff_jags, variable.names=c("theta","tau","h0","b0", "b1","b2", "b3", "b4", "b5", "b6"), n.iter=10000)
+   
+score_diff_sample <- data.frame(step=1:10000, score_diff_sim[[1]])
+head(score_diff_sample)
+```
+```{r}
+summary(score_diff_sim)
+plot(score_diff_sim)
+```
+```{r}
+set.seed(13)
+
+predictScoreDiff <- function(modelDFRow){
+  predictions = 
+    rpois(10000,exp(score_diff_sample$h0 + score_diff_sample$b0 + score_diff_sample$b1*modelDFRow$Home_O_Points + score_diff_sample$b2*modelDFRow$Away_D_Points + rnorm(score_diff_sample[,modelDFRow$Home_id + 6], sqrt(1/score_diff_sample$tau)))) - 
+    rpois(10000, exp(score_diff_sample$b0 + score_diff_sample$b1*modelDFRow$Away_O_Points + score_diff_sample$b2*modelDFRow$Home_D_Points + rnorm(score_diff_sample[,modelDFRow$Away_id + 6],sqrt(1/score_diff_sample$tau))))
+
+}
+
+comparePrediction <- function(modelDF){
+  accuracyVect = rep(0,nrow(modelDF))
+  for(i in 1:nrow(modelDF)){
+    scoreDiff = modelDF$Home_Points[i] - modelDF$Away_Points[i]
+    predictionsDF = data.frame(predictScoreDiff(modelDF[i,])) 
+    meanPredictions = mean(predictionsDF[,1])
+    accuracyVect[i] = round(scoreDiff - meanPredictions)
+  }
+  accuracyDF = data.frame(accuracyVect)
+  colnames(accuracyDF)[1]<- "Prediction Accuracy"
+  return(accuracyDF)
+}
+```
+```{r}
+predictions2016 = comparePrediction(modelDF2016)
+# View(predictions2016)
+
+mean(predictions2016$`Prediction Accuracy`)
+ggplot(predictions2016, aes(x=`Prediction Accuracy`)) + geom_histogram(binwidth = 3, aes(y=..density..))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

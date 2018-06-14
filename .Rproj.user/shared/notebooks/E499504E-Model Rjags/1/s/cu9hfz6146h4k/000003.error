@@ -1,0 +1,1 @@
+{"frames":[{"character_number":0,"end_character_number":0,"end_line_number":0,"file":"","func":"head(predictmain1(0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0))","line_number":0}],"message":"Error in predictmain1(0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0) : \n  unused arguments (0.5, 0.5, 0.5, 0)\n"}

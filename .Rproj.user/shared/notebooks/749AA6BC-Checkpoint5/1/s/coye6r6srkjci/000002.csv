@@ -1,0 +1,29 @@
+"0","library(tidyr)"
+"0","library(dplyr)"
+"0","library(ggplot2)"
+"0","library(lubridate)"
+"0","library(readr)"
+"0","library(igraph)"
+"0","library(rjags)"
+"2","Loading required package: coda
+"
+"2","Linked to JAGS 4.1.0
+"
+"2","Loaded modules: basemod,bugs
+"
+"0","library(xml2)"
+"0","library(rvest)"
+"2","
+Attaching package: ‘rvest’
+
+"
+"2","The following object is masked from ‘package:igraph’:
+
+    %>%
+
+"
+"2","The following object is masked from ‘package:readr’:
+
+    guess_encoding
+
+"

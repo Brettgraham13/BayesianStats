@@ -1,0 +1,8 @@
+"0","set.seed(1000)"
+"0","predictmain2 <- function(x,w,a,b,c,d,h){"
+"0","  prediction <- rpois(10000, main1_sample$b0 + main1_sample$b1*(x/(x+w)) +main2_sample$b2*(a/(a+b)) +main2_sample$b3*(c/(c+d)) + main1_sample$b10*h)"
+"0","}"
+"0","head(predictmain1(.5,.5,.5,.5,.5,.5,0))"
+"2","Error in predictmain1(0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0) : 
+  unused arguments (0.5, 0.5, 0.5, 0)
+"

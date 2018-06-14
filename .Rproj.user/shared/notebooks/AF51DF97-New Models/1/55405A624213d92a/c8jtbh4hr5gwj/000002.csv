@@ -1,0 +1,3 @@
+"0","home_pred <- data.frame(Team=teamIDs2017$Team, Home_Advantage=home_bayes_est)"
+"0","# BA_pred <- BA_pred %>% "
+"0","#     gather(key=method, value=estimate, -player)"

@@ -1,0 +1,7 @@
+"0","date_html <- html_nodes(webpage2017,'td:nth-child(1) .hidden-xs , .divheader')"
+"0","date_data <- html_text(date_html)"
+"0","#date_data"
+"0","week <- rep(0,256)"
+"0","if (date17_data >= ""2017-09-14"") week=1 else week=0"
+"2","the condition has length > 1 and only the first element will be used"
+"0","mutate(fbscores2017, Week=week)"

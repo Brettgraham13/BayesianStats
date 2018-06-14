@@ -1,0 +1,7 @@
+"0","denver = teamPredictions(predict2016,""Denver"")"
+"0","newEngland = teamPredictions(predict2016,""New England"")"
+"0","losAngeles = teamPredictions(predict2016,""Los Angeles"")"
+"0","carolina = teamPredictions(predict2016,""Carolina"")"
+"0","chicago = teamPredictions(predict2016,""Chicago"")"
+"0","ggplot(denver, aes(x= Week,y = Points,color = Variable)) +"
+"0","    geom_line() + geom_point()"

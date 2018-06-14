@@ -1,0 +1,3 @@
+"0","ggplot(modelDF2016Filt, aes(x=`O_Avg Rush`/(`O_Avg Rush` +`D_Avg Rush`),y=`Offense Points`)) +"
+"0","  geom_point() +"
+"0","  xlim(0.25,.75)"

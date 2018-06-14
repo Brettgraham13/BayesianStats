@@ -1,0 +1,2 @@
+"0","ggplot(newEngland, aes(x= Week,y = Points,color = Variable)) +"
+"0","    geom_line() + geom_point()"

@@ -1,0 +1,455 @@
+---
+title: "Brett rjags"
+author: "Brett Graham"
+date: "12/6/2017"
+output: html_document
+---
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(readr)
+library(igraph)
+library(rjags)
+set.seed(1000)
+```
+##Model skeleton for Offensive & Defensive rank to predict score. (Hierarchical structure to draw average of team from average of league?)
+
+```{r}
+#Overspecified Model where offensive stats combine into an offensive score and likewise with defenseive stats
+
+
+modelData <- filter(modelDF2016,Week>5)
+
+main1 <- "model{
+  #Data 
+  for(i in 1:length(y)) {
+      y[i] ~ dpois(rate[i])
+      rate[i] ~ dnorm(g0 + h0*h[i] + g1*off[i] + g2*def[i],tau1)
+  }
+  
+  for(i in 1:length(y)){
+      log(off[i]) <- a0 + a1*a[i] + a2*b[i] + a3*c[i]+ a4*d[i] + a5*e[i] 
+      log(def[i]) <- b0 + b1*f[i] + b2*g[i] + b3*j[i] + b4*k[i] + b5*l[i]
+  }
+
+
+
+  #Priors
+  h0 ~ dnorm(3,1)
+  g0 ~ dnorm(5,1/10)
+  g1 ~ dnorm(5,1/10)
+  g2 ~ dnorm(5,1/10)
+
+  a0 ~ dnorm(5,1/10)
+  a1 ~ dnorm(5,1/10)
+  a2 ~ dnorm(5,1/10)
+  a3 ~ dnorm(5,1/10)
+  a4 ~ dnorm(5,1/10)
+  a5 ~ dnorm(5,1/10)
+
+  b0 ~ dnorm(5,1/10)
+  b1 ~ dnorm(5,1/10)
+  b2 ~ dnorm(5,1/10)
+  b3 ~ dnorm(5,1/10)
+  b4 ~ dnorm(5,1/10)
+  b5 ~ dnorm(5,1/10)
+
+
+  tau1 ~ dgamma(1,1/10)
+}"
+
+
+main1_jags <- jags.model(textConnection(main1), 
+               data= list(y=modelData$`Offense Points`,a = modelData$O_Points,b=modelData$`O_Avg Rush`,c=modelData$`D_Avg Pass`,d=modelData$`O_Net Rush`,e = modelData$`O_Net Pass`,f = modelData$D_Points,g=modelData$`D_Avg Rush`,j=modelData$`D_Avg Pass`,k=modelData$`D_Net Rush`,l=modelData$`D_Net Pass`, h=modelData$`Is Home`),
+                    inits=list(.RNG.name="base::Wichmann-Hill", .RNG.seed=1989))
+
+
+main1_sim <- coda.samples(main1_jags, variable.names=c("h0","g0","g1","g2","a0","a1","a2","a3","a4","a5","b0","b1","b2","b3","b4","b5","tau1"), n.iter=10000)
+   
+main1_sample <- data.frame(step=1:10000, main1_sim[[1]])
+head(main1_sample)
+```
+```{r}
+summary(main1_sim)
+plot(main1_sim)
+```
+```{r}
+set.seed(1000)
+predictmain1 <- function(a,b,c,d,e,f,g,j,k,l,h){
+  offense <-  exp(main1_sample$a0 + main1_sample$a1*a + main1_sample$a2*b + main1_sample$a3*c + main1_sample$a4*d + main1_sample$a5*e)
+  defense <- exp(main1_sample$b0 + main1_sample$b1*f + main1_sample$b2*g + main1_sample$b3*j + main1_sample$b4*k + main1_sample$b5*l)
+  
+  rate <- rnorm(main1_sample$g0 + main1_sample$h0*h + main1_sample$g1*offense + main1_sample$g2*defense, sqrt(1/main1_sample$tau1))
+  rate[rate<0]<-0
+  
+  prediction <- rpois(10000,rate)
+  return(prediction)
+}
+```
+```{r}
+modelData <- modelDF2016 %>% filter(Week>5) %>% arrange(Week)
+
+superbowl <- modelData[nrow(modelData),]
+# View(superbowl)
+NE_prediction <-predictmain1(superbowl[,9],superbowl[,11],superbowl[,13],superbowl[,10],superbowl[,12],superbowl[,19],superbowl[,21],superbowl[,23],superbowl[,20],superbowl[,22],superbowl[,24])
+
+head(NE_prediction)
+mean(NE_prediction)
+
+NE_prediction <- data.frame(NE_prediction)
+
+colnames(NE_prediction)[1]<- "prediction"
+
+ggplot(NE_prediction, aes(x=prediction)) + geom_histogram(aes(y=..density..))
+
+
+
+
+```
+
+
+
+
+```{r}
+modelData <- modelDF2016 %>% filter(Week>5) %>% arrange(Week)
+
+superbowl <- modelData[nrow(modelData),]
+# View(superbowl)
+NE_prediction <-predictmain1(superbowl[,9],superbowl[,11],superbowl[,13],superbowl[,10],superbowl[,12],superbowl[,19],superbowl[,21],superbowl[,23],superbowl[,20],superbowl[,22],superbowl[,24])
+
+head(NE_prediction)
+mean(NE_prediction)
+
+NE_prediction <- data.frame(NE_prediction)
+
+colnames(NE_prediction)[1]<- "prediction"
+
+ggplot(NE_prediction, aes(x=prediction)) + geom_histogram(aes(y=..density..))
+
+
+
+```
+```{r}
+set.seed(1000)
+main_predict1 = data.frame(predictmain1(.5,.5,0))
+colnames(main_predict1)[1]<- "prediction"
+
+ggplot(main_predict1, aes(x=prediction)) + geom_histogram(aes(y=..density..))
+
+```
+
+
+
+
+
+
+
+
+
+
+```{r}
+#Overspecified Model where offensive stats combine into an offensive score and likewise with defenseive stats
+
+
+modelData <- filter(modelDF2016,Week>5)
+
+main1 <- "model{
+  #Data 
+  for(i in 1:length(y)) {
+      y[i] ~ dpois(rate[i])
+      log(rate[i]) <- a0 + a1*(a[i]/(a[i]+f[i]))+a2*(b[i]/(b[i]+g[i]))+a3*(c[i]/(c[i]+j[i])) +a4*(d[i]/(d[i]+k[i])) + a5*(e[i]/(e[i]+l[i]))
+  }
+  
+
+
+  #prior
+
+  h0 ~ dnorm(3,1)
+  a0 ~ dnorm(10,1/10)
+  a1 ~ dnorm(10,1/10)
+  a2 ~ dnorm(10,1/10)
+  a3 ~ dnorm(10,1/10)
+  a4 ~ dnorm(10,1/10)
+  a5 ~ dnorm(10,1/10)
+
+}"
+
+
+main1_jags <- jags.model(textConnection(main1), 
+               data= list(y=modelData$`Offense Points`,a = modelData$O_Points,b=modelData$`O_Avg Rush`,c=modelData$`D_Avg Pass`,d=modelData$`O_Net Rush`,e = modelData$`O_Net Pass`,f = modelData$D_Points,g=modelData$`D_Avg Rush`,j=modelData$`D_Avg Pass`,k=modelData$`D_Net Rush`,l=modelData$`D_Net Pass`, h=modelData$`Is Home`),
+                    inits=list(.RNG.name="base::Wichmann-Hill", .RNG.seed=1989))
+
+
+main1_sim <- coda.samples(main1_jags, variable.names=c("h0","a0","a1","a2","a3","a4","a5"), n.iter=10000)
+   
+main1_sample <- data.frame(step=1:10000, main1_sim[[1]])
+head(main1_sample)
+```
+```{r}
+summary(main1_sim)
+plot(main1_sim)
+```
+```{r}
+set.seed(1000)
+predictmain1 <- function(a,b,c,d,e,f,g,j,k,l,h){
+  rate <- main1_sample$a0 + main1_sample$h0*h + main1_sample$a1*(a/(a+f)) +main1_sample$a2*(b/(b+g)) + main1_sample$a3*(c/(c+j))+main1_sample$a4*(d/(d+k)) + main1_sample$a5*(e/(e+l))
+  rate[rate<0]<-0
+  
+  prediction <- rpois(10000,rate)
+  return(rate)
+}
+```
+```{r}
+modelData <- modelDF2016 %>% filter(Week>5) %>% arrange(Week)
+
+superbowl <- modelData[nrow(modelData),]
+# View(superbowl)
+NE_prediction <-predictmain1(superbowl[,9],superbowl[,11],superbowl[,13],superbowl[,10],superbowl[,12],superbowl[,19],superbowl[,21],superbowl[,23],superbowl[,20],superbowl[,22],superbowl[,24])
+
+head(NE_prediction)
+mean(NE_prediction)
+```
+
+
+```{r}
+modelData <- modelDF2016 %>% filter(Week>5) %>% arrange(Week)
+
+superbowl <- modelData[nrow(modelData),]
+# View(superbowl)
+NE_prediction <-predictmain1(superbowl[,9],superbowl[,11],superbowl[,13],superbowl[,10],superbowl[,12],superbowl[,19],superbowl[,21],superbowl[,23],superbowl[,20],superbowl[,22],superbowl[,24])
+
+head(NE_prediction)
+mean(NE_prediction)
+
+NE_prediction <- data.frame(NE_prediction)
+
+colnames(NE_prediction)[1]<- "prediction"
+
+ggplot(NE_prediction, aes(x=prediction)) + geom_histogram(aes(y=..density..))
+
+
+
+```
+```{r}
+set.seed(1000)
+main_predict1 = data.frame(predictmain1(.5,.5,0))
+colnames(main_predict1)[1]<- "prediction"
+
+ggplot(main_predict1, aes(x=prediction)) + geom_histogram(aes(y=..density..))
+
+```
+
+
+```{r}
+#Overspecified Model where offensive stats combine into an offensive score and likewise with defenseive stats
+
+
+modelData <- filter(modelDF2016,Week>5)
+
+main1 <- "model{
+  #Data 
+  for(i in 1:length(y)) {
+      y[i] ~ dpois(rate[i])
+      rate[i] ~ dnorm(h0*h[i] + a0 + a1*(a[i]/(a[i]+f[i])),tau1) 
+  }
+  
+
+
+
+
+  #Priors
+  h0 ~ dnorm(3,1)
+  
+  a0 ~ dnorm(0,1/10)
+  a1 ~ dnorm(10,1/10)
+
+  tau1 ~ dgamma(1,1/10)
+}"
+
+
+main1_jags <- jags.model(textConnection(main1), 
+               data= list(y=modelData$`Offense Points`,a = modelData$O_Points,f = modelData$D_Points, h=modelData$`Is Home`),
+                    inits=list(.RNG.name="base::Wichmann-Hill", .RNG.seed=1989))
+
+
+main1_sim <- coda.samples(main1_jags, variable.names=c("h0","a0","a1","tau1"), n.iter=10000)
+   
+main1_sample <- data.frame(step=1:10000, main1_sim[[1]])
+head(main1_sample)
+```
+```{r}
+summary(main1_sim)
+plot(main1_sim)
+```
+
+```{r}
+modelData <- modelDF2016 %>% filter(Week>5) %>% arrange(Week)
+
+superbowl <- modelData[nrow(modelData),]
+# View(superbowl)
+NE_prediction <-predictmain1(superbowl[,9],superbowl[,11],superbowl[,13],superbowl[,10],superbowl[,12],superbowl[,19],superbowl[,21],superbowl[,23],superbowl[,20],superbowl[,22],superbowl[,24])
+
+head(NE_prediction)
+mean(NE_prediction)
+
+NE_prediction <- data.frame(NE_prediction)
+
+colnames(NE_prediction)[1]<- "prediction"
+
+ggplot(NE_prediction, aes(x=prediction)) + geom_histogram(aes(y=..density..))
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+modelData <- filter(modelDF2016,Week>5)
+
+
+main1 <- "model{
+  #Data 
+  for(i in 1:length(y)) {
+
+      y[i] ~ dpois(rate[i])
+      
+      rate[i] ~ dnorm(g0 +h0*h[i] + g1*off[i]+g2*def[i],tau)
+  }
+  
+  for(j in 1:length(y)){
+      off[j] <- a0 + a1*o1[j] + a2*o2[j] + a3*o3[j] + a4*o4[j] + a5*o5[j]
+      def[j] <- b0 + b1*d1[j] + b2*d2[j] + b3*d3[j] + b4*d4[j] + b5*d5[j]
+  }
+
+  #Priors
+  h0 ~ dnorm(3,1)
+  g0 ~ dnorm(0,1/10)
+  g1 ~ dnorm(10,1/10)
+  g2 ~ dnorm(-10,1/10)
+
+  a0 ~ dnorm(5,1/10)
+  a1 ~ dnorm(5,1/10)
+  a2 ~ dnorm(5,1/10)
+  a3 ~ dnorm(5,1/10)
+  a4 ~ dnorm(5,1/10)
+  a5 ~ dnorm(5,1/10)
+  
+  b0 ~ dnorm(5,1/10)
+  b1 ~ dnorm(5,1/10)
+  b2 ~ dnorm(5,1/10)
+  b3 ~ dnorm(5,1/10)
+  b4 ~ dnorm(5,1/10)
+  b5 ~ dnorm(5,1/10)
+
+  tau ~ dgamma(100,10)
+}"
+
+
+main1_jags <- jags.model(textConnection(main1), 
+               data= list(y=modelData$`Offense Points`,o1 = modelData$O_Points,o2=modelData$`O_Avg Rush`,o3=modelData$`O_Avg Pass`,o4=modelData$`O_Net Rush`,o5 = modelData$`O_Net Pass`,d1 = modelData$D_Points,d2 = modelData$`D_Avg Rush`,d3 = modelData$`D_Avg Pass`,d4=modelData$`D_Net Rush`,d5 = modelData$`D_Net Pass`, h=modelData$`Is Home`),
+                    inits=list(.RNG.name="base::Wichmann-Hill", .RNG.seed=1989))
+
+
+main1_sim <- coda.samples(main1_jags, variable.names=c("h0","g0","g1","g2","a0","a1","a2","a3","a4","a5","b0","b1","b2","b3","b4","b5","tau"), n.iter=10000)
+   
+main1_sample <- data.frame(step=1:10000, main1_sim[[1]])
+head(main1_sample)
+```
+```{r}
+summary(main1_sim)
+```
+```{r}
+set.seed(1000)
+predictmain1 <- function(x,w,h){
+  prediction <- rpois(10000, main1_sample$b0 + main1_sample$b1*(x/(x+w)) + main1_sample$b10*h)
+}
+
+head(predictmain1(.5,.5,0))
+mean(predictmain1(.5,.5,0))
+
+mean(predictmain1(.5,.3,0))
+
+
+```
+```{r}
+set.seed(1000)
+main_predict1 = data.frame(predictmain1(.5,.5,0))
+colnames(main_predict1)[1]<- "prediction"
+
+ggplot(main_predict1, aes(x=prediction)) + geom_histogram(aes(y=..density..))
+
+```

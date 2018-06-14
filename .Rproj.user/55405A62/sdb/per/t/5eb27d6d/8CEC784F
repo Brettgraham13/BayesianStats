@@ -1,0 +1,29 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1517895681713.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "8CEC784F",
+    "lastKnownWriteTime" : 8030604587339612159,
+    "last_content_update" : 1517895681713,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "4B8358D2",
+        "caption" : "modelDF2017",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=modelDF2017&cache_key=4B8358D2",
+        "displayedObservations" : 213,
+        "environment" : "",
+        "object" : "modelDF2017",
+        "preview" : 0,
+        "totalObservations" : 213,
+        "variables" : 33
+    },
+    "relative_order" : 8,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_dataframe"
+}

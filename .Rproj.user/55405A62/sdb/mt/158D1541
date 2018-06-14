@@ -1,0 +1,29 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1519876921607.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "158D1541",
+    "lastKnownWriteTime" : 4,
+    "last_content_update" : 1519876921607,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "C5B84697",
+        "caption" : "game_stats_2017",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=game_stats_2017&cache_key=C5B84697",
+        "displayedObservations" : "266",
+        "environment" : "",
+        "object" : "game_stats_2017",
+        "preview" : "0",
+        "totalObservations" : "266",
+        "variables" : "58"
+    },
+    "relative_order" : 3,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_dataframe"
+}

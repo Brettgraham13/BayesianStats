@@ -1,0 +1,4 @@
+"0","modelData <-modelDF2014 %>% bind_rows(modelDF2015)  #Data filtered to later weeks to avoid noise"
+"2","Unequal factor levels: coercing to character"
+"2","binding character and factor vector, coercing into character vector"
+"2","binding character and factor vector, coercing into character vector"

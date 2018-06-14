@@ -1,0 +1,846 @@
+---
+title: "Model Rjags"
+author: "Gunnar Goeden Brett Graham"
+date: "11/28/2017"
+output: html_document
+---
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(readr)
+library(igraph)
+library(rjags)
+
+```
+##Model skeleton for Offensive & Defensive rank to predict score. (Hierarchical structure to draw average of team from average of league?)
+```{r}
+modelDF2014 <- filter(modelDF2014, Week>5)
+modelDF2015 <- filter(modelDF2015,Week>5)
+
+
+
+```
+```{r}
+modelData <-modelDF2014 %>% bind_rows(modelDF2015)  #Data filtered to later weeks to avoid noise
+
+
+main1 <- "model{
+  #Data 
+  for(i in 1:length(y)) {
+       y[i] ~ dpois(mu[i])
+       log(mu[i]) <- b0 + b1*(x[i]/(x[i]+w[i])) + b10*h[i]
+  }
+
+  #Priors
+  b0 ~ dnorm(0,1/10)
+  b1 ~ dnorm(1,1/10)
+  b10 ~ dnorm(3,1)
+
+}"
+
+
+main1_jags <- jags.model(textConnection(main1), 
+               data= list(y=modelData$`Offense Points`, x=modelData$O_Points, w=modelData$D_Points, h=modelData$`Is Home`),
+                    inits=list(.RNG.name="base::Wichmann-Hill", .RNG.seed=1989))
+
+
+main1_sim <- coda.samples(main1_jags, variable.names=c("b0","b1","b10"), n.iter=10000)
+   
+main1_sample <- data.frame(step=1:10000, main1_sim[[1]])
+head(main1_sample)
+```
+```{r}
+summary(main1_sim)
+```
+```{r}
+set.seed(13)
+predictmain1 <- function(x,w,h){
+  prediction <- rpois(10000,exp(main1_sample$b0 + main1_sample$b1*(x/(x+w)) + main1_sample$b10*h))
+}
+
+comparePrediction <- function(scores,O_data,D_data,is_home){
+  vals = rep(0,length(scores))
+  for(i in 1:length(scores)){
+    actualScore = scores[i]
+    prediction = predictmain1(O_data[i],D_data[i],is_home[i])
+    vals[i]=actualScore-prediction
+  }
+  return(vals)
+  
+}
+
+```
+
+```{r}
+modelData2016 <- filter(modelDF2016,Week>5)
+predictionAccuracy = data.frame(comparePrediction(modelData2016[,4],modelData2016[,9],modelData2016[,19],modelData2016[,24]))
+# View(modelDF2016)
+
+colnames(predictionAccuracy)[1]<- "prediction"
+ggplot(predictionAccuracy, aes(x=prediction)) + geom_histogram(binwidth = 3, aes(y=..density..)) 
+
+
+
+
+
+```
+```{r}
+set.seed(1989)
+main_predict1 = data.frame(predictmain1(.04045,0.04835,0))
+colnames(main_predict1)[1]<- "prediction"
+
+ggplot(main_predict1, aes(x=prediction)) + geom_histogram(aes(y=..density..))
+
+```
+
+```{r}
+modelData <-filter(modelDF2016,Week>5)
+
+main1_1 <- "model{
+  #Data 
+  for(i in 1:length(y)) {
+      y[i] ~ dpois(lam[i])
+      lam[i] ~ dnorm(mu[i],tau)
+      mu[i] <- b0 + b1*(x[i]/(x[i]+w[i])) + b10*h[i]
+  }
+
+  #Priors
+  b0 ~ dnorm(0,1/10)
+  b1 ~ dnorm(1,1/10)
+  b10 ~ dnorm(3,1)
+  tau ~ dgamma(1,1/10)
+ 
+
+}"
+
+
+main1_1_jags <- jags.model(textConnection(main1_1), 
+               data= list(y=modelData$`Offense Points`, x=modelData$O_Points, w=modelData$D_Points, h=modelData$`Is Home`),
+                    inits=list(.RNG.name="base::Wichmann-Hill", .RNG.seed=1989))
+
+
+main1_1_sim <- coda.samples(main1_1_jags, variable.names=c("b0","b1","b10","tau"), n.iter=10000)
+   
+main1_1_sample <- data.frame(step=1:10000, main1_1_sim[[1]])
+head(main1_1_sample)
+```
+```{r}
+summary(main1_1_sim)
+```
+```{r}
+set.seed(1989)
+predictmain1_1 <- function(x,w,h){
+  rate <- rnorm(10000, main1_1_sample$b0 + main1_1_sample$b1*(x/(x+w)) + main1_1_sample$b10*h, sqrt(main1_1_sample$tau^{-1}))
+  rate<-rate[rate>0]
+  prediction <- rpois(10000,rate)
+}
+
+head(predictmain1_1(.04835,.04045,0))
+mean(predictmain1_1(.04835,.04045,0))
+
+```
+```{r}
+set.seed(1989)
+main_predict1_1 = data.frame(predictmain1_1(.04045,0.04835,0))
+colnames(main_predict1_1)[1]<- "prediction"
+
+ggplot(main_predict1_1, aes(x=prediction)) + geom_histogram(aes(y=..density..))
+
+```
+
+```{r}
+#Overspecified Model where offensive stats combine into an offensive score and likewise with defenseive stats
+
+
+modelData <- filter(modelDF2016,Week>5)
+
+main1 <- "model{
+  #Data 
+  for(i in 1:length(y)) {
+      y[i] ~ dpois(rate[i])
+      rate[i] ~ dnorm(g0 + h0*h[i] + g1*off[i] + g2*def[i],tau1)
+  }
+  
+  for(i in 1:length(y)){
+      off[i] <- a0 + a1*a[i] + a2*b[i] + a3*c[i]+ a4*d[i] + a5*e[i] 
+      def[i] <- b0 + b1*f[i] + b2*g[i] + b3*j[i] + b4*k[i] + b5*l[i]
+  }
+
+
+
+  #Priors
+  h0 ~ dnorm(3,1)
+  g0 ~ dnorm(5,1/10)
+  g1 ~ dnorm(5,1/10)
+  g2 ~ dnorm(-5,1/10)
+
+  a0 ~ dnorm(5,1/10)
+  a1 ~ dnorm(5,1/10)
+  a2 ~ dnorm(5,1/10)
+  a3 ~ dnorm(5,1/10)
+  a4 ~ dnorm(5,1/10)
+  a5 ~ dnorm(5,1/10)
+
+  b0 ~ dnorm(5,1/10)
+  b1 ~ dnorm(5,1/10)
+  b2 ~ dnorm(5,1/10)
+  b3 ~ dnorm(5,1/10)
+  b4 ~ dnorm(5,1/10)
+  b5 ~ dnorm(5,1/10)
+
+
+  tau1 ~ dgamma(1,1/10)
+}"
+
+
+main1_jags <- jags.model(textConnection(main1), 
+               data= list(y=modelData$`Offense Points`,a = modelData$O_Points,b=modelData$`O_Avg Rush`,c=modelData$`D_Avg Pass`,d=modelData$`O_Net Rush`,e = modelData$`O_Net Pass`,f = modelData$D_Points,g=modelData$`D_Avg Rush`,j=modelData$`D_Avg Pass`,k=modelData$`D_Net Rush`,l=modelData$`D_Net Pass`, h=modelData$`Is Home`),
+                    inits=list(.RNG.name="base::Wichmann-Hill", .RNG.seed=1989))
+
+
+main1_sim <- coda.samples(main1_jags, variable.names=c("h0","g0","g1","g2","a0","a1","a2","a3","a4","a5","b0","b1","b2","b3","b4","b5","tau1"), n.iter=10000)
+   
+main1_sample <- data.frame(step=1:10000, main1_sim[[1]])
+head(main1_sample)
+```
+```{r}
+summary(main1_sim)
+plot(main1_sim)
+```
+```{r}
+set.seed(1000)
+predictmain1 <- function(x,w,h){
+  prediction <- rpois(10000,main1_sample$b0 + main1_sample$b1*(x/(x+w)) + main1_sample$b10*h)
+}
+
+head(predictmain1(.04835,.04045,0))
+mean(predictmain1(.04835,.04045,0))
+
+```
+```{r}
+set.seed(1000)
+main_predict1 = data.frame(predictmain1(.04045,0.04835,0))
+colnames(main_predict1)[1]<- "prediction"
+
+ggplot(main_predict1, aes(x=prediction)) + geom_histogram(aes(y=..density..))
+
+```
+
+
+
+
+
+##First model to predict points scored by a team using their rush yards/att and pass yards/att in the given game
+```{r}
+#PLoting a simple Bayesian regression model using avg rush yds/att and avg pass yds/att
+
+simple1 <- "model{
+  #Data 
+  for(i in 1:length(y)) {
+        y[i] ~ dnorm(mu[i], tau)
+        mu[i] <- b0+b1*x[i]+b2*w[i] 
+        
+   }
+
+  #Priors
+  b0 ~ dnorm(0,1/10)
+  b1 ~ dnorm(1,1/10)
+  b2 ~ dnorm(1,1/10)
+  tau ~ dgamma(1,1/10)
+ 
+
+}"
+
+
+simple1_jags <- jags.model(textConnection(simple1), 
+                    data= list(y=data_2016$`Home_Points`, x=data_2016$`Home_Avg Rush Gain`, w=data_2016$`Home_Pass Gain/Att`),
+                    inits=list(.RNG.name="base::Wichmann-Hill", .RNG.seed=1989))
+
+
+simple1_sim <- coda.samples(simple1_jags, variable.names=c("b0","b1","b2","tau"), n.iter=10000)
+   
+simple1_sample <- data.frame(step=1:10000, simple1_sim[[1]])
+head(simple1_sample)
+```
+
+```{r}
+summary(simple1_sim)
+plot(simple1_sim)
+
+```
+```{r}
+predictsimple1 <- function(x,w){
+  rnorm(10000, -1.78594 + 1.31796*x + 2.89480*w, 0.01842^{-1})
+}
+  
+head(predictsimple1(4,8))
+mean(predictsimple1(4,8))
+```
+
+```{r}
+
+# ggplot(data_2016, aes(x=`Home_Pass Gain/Att`,y=`Home_Points`)) + 
+#   geom_point()
+simple_predict = data.frame(predictsimple1(4,8))
+colnames(simple_predict)[1]<- "prediction"
+# View(simple_predict)
+
+ggplot(simple_predict, aes(x=prediction)) + geom_histogram(aes(y=..density..))
+
+```
+
+
+###Notes
+Remember rjags standard deviation has to be variance (1/x). Also, errors should be lower. Scores and other yardage variables should be a distribution that is non-zero.
+
+```{r}
+#a quick plot of gamma curve. Distribution for points scored?
+curve(dgamma(x, shape=10, rate=.5), from=0, to=80)
+```
+
+
+##Second model to predict points scored by a team using their rush yards/att and pass yards/att in the given game. Adjustment to Pois dist for non-negative points
+```{r}
+#PLoting a simple Bayesian regression model using avg rush yds/att and avg pass yds/att
+
+simple2 <- "model{
+  #Data 
+  for(i in 1:length(y)) {
+        y[i] ~ dpois(lam[i])
+        lam[i] ~ dnorm(mu[i],tau)  
+         mu[i] <- b0+b1*x[i]+b2*w[i]
+        
+   }
+
+  #Priors
+  b0 ~ dnorm(0,1/10)
+  b1 ~ dnorm(1,1/10)
+  b2 ~ dnorm(1,1/10)
+  tau ~ dgamma(1,1/10)
+ 
+
+}"
+
+
+simple2_jags <- jags.model(textConnection(simple2), 
+                    data= list(y=data_2016$`Home_Points`, x=data_2016$`Home_Avg Rush Gain`, w=data_2016$`Home_Pass Gain/Att`),
+                    inits=list(.RNG.name="base::Wichmann-Hill", .RNG.seed=1989))
+
+
+simple2_sim <- coda.samples(simple2_jags, variable.names=c("b0","b1","b2","tau"), n.iter=10000)
+   
+simple2_sample <- data.frame(step=1:10000, simple2_sim[[1]])
+head(simple2_sample)
+```
+```{r}
+summary(simple2_sim)
+plot(simple2_sim)
+```
+```{r}
+set.seed(1000)
+predictsimple2 <- function(x,w){
+  rate <- rnorm(10000, 2.12177 + 0.05209*x + 0.11608*w, sqrt(10.04231^{-1}))
+  rate<-rate[rate>0]
+  prediction <- rpois(10000,rate)
+}
+  
+head(predictsimple2(4,8))
+mean(predictsimple2(4,8))
+```
+```{r}
+
+# ggplot(data_2016, aes(x=`Home_Pass Gain/Att`,y=`Home_Points`)) + 
+#   geom_point()
+simple_predict2 = data.frame(predictsimple2(4,8))
+colnames(simple_predict2)[1]<- "prediction"
+# View(simple_predict)
+
+ggplot(simple_predict2, aes(x=prediction)) + geom_histogram(aes(y=..density..))
+
+```
+
+
+##Second model to predict points scored by a team using their rush yards/att and pass yards/att in the given game. Adjustment to Pois dist for non-negative points ***
+#GOOD MODEL - WORKS WELL -Must fine-tune
+```{r}
+#PLoting a simple Bayesian regression model using avg rush yds/att and avg pass yds/att
+
+simple2 <- "model{
+  #Data 
+  for(i in 1:length(y)) {
+        y[i] ~ dpois(lam[i])
+        lam[i] ~ dnorm(mu[i],tau)  
+        mu[i] <- b0+b1*x[i]+b2*w[i]
+        
+   }
+
+  #Priors
+  b0 ~ dnorm(0,1/10)
+  b1 ~ dnorm(1,1/10)
+  b2 ~ dnorm(1,1/10)
+  tau ~ dgamma(1,1/10)
+ 
+
+}"
+
+
+simple2_jags <- jags.model(textConnection(simple2), 
+                    data= list(y=data_2016$`Home_Points`, x=data_2016$`Home_Avg Rush Gain`, w=data_2016$`Home_Pass Gain/Att`),
+                    inits=list(.RNG.name="base::Wichmann-Hill", .RNG.seed=1989))
+
+
+simple2_sim <- coda.samples(simple2_jags, variable.names=c("b0","b1","b2","tau"), n.iter=10000)
+   
+simple2_sample <- data.frame(step=1:10000, simple2_sim[[1]])
+head(simple2_sample)
+```
+```{r}
+summary(simple2_sim)
+plot(simple2_sim)
+```
+```{r}
+set.seed(1000)
+predictsimple2 <- function(x,w){
+  rate <- rnorm(10000, simple2_sample$b0 + simple2_sample$b1*x + simple2_sample$b2*w, sqrt(simple2_sample$tau^{-1}))
+  rate<-rate[rate>0]
+  prediction <- rpois(10000,rate)
+}
+  
+head(predictsimple2(4,8))
+mean(predictsimple2(4,8))
+```
+```{r}
+simple_predict2 = data.frame(predictsimple2(4,8))
+colnames(simple_predict2)[1]<- "prediction"
+
+ggplot(simple_predict2, aes(x=prediction)) + geom_histogram(aes(y=..density..))
+
+```
+
+
+
+
+
+
+
+
+
+##Fourth model to predict score based on offensive statistics with cumulative averages (running means). Includes catagorical "home" variable
+
+```{r}
+#PLoting a simple Bayesian regression model using avg rush yds/att and avg pass yds/att
+
+simple4 <- "model{
+  #Data 
+  for(i in 1:length(y)) {
+        y[i] ~ dpois(lam[i])
+        lam[i] ~ dnorm(mu[i],tau)  
+        mu[i] <- b0+b10*h[i]+b1*x[i]+b2*w[i]
+        
+   }
+
+  #Priors
+  b0 ~ dnorm(0,1/10)
+  b1 ~ dnorm(1,1/10)
+  b2 ~ dnorm(1,1/10)
+  b10 ~ dnorm(0,1/1000)
+  tau ~ dgamma(1,1/10)
+ 
+
+}"
+
+
+simple4_jags <- jags.model(textConnection(simple4), 
+               data= list(y=modelDF2016$Offense_Points, x=modelDF2016$`Offense_cumavg rush`, w=modelDF2016$`Offense_cumavg pass`, h=modelDF2016$`Is Home`),
+                    inits=list(.RNG.name="base::Wichmann-Hill", .RNG.seed=1989))
+
+
+simple4_sim <- coda.samples(simple4_jags, variable.names=c("b0","b1","b2","b10", "tau"), n.iter=10000)
+   
+simple4_sample <- data.frame(step=1:10000, simple4_sim[[1]])
+head(simple4_sample)
+```
+```{r}
+summary(simple4_sim)
+plot(simple4_sim)
+```
+```{r}
+set.seed(1000)
+predictsimple4 <- function(x,w,h){
+  rate <- rnorm(10000, simple4_sample$b0 + simple4_sample$b1*x + simple4_sample$b2*w + simple4_sample$b10*h, sqrt(simple4_sample$tau^{-1}))
+  rate<-rate[rate>0]
+  prediction <- rpois(10000,rate)
+}
+  
+head(predictsimple4(4,8,1))
+mean(predictsimple4(4,8,1))
+```
+```{r}
+simple_predict4 = data.frame(predictsimple4(4,8,1))
+colnames(simple_predict4)[1]<- "prediction"
+
+ggplot(simple_predict4, aes(x=prediction)) + geom_histogram(aes(y=..density..))
+
+```
+
+
+
+
+
+
+
+##Experiment with fourth model -- adding more variables
+
+
+```{r}
+#PLoting a simple Bayesian regression model using avg rush yds/att and avg pass yds/att AND Defensive stats
+
+
+simple5 <- "model{
+  #Data 
+  for(i in 1:length(y)) {
+        y[i] ~ dpois(lam[i])
+        lam[i] ~ dnorm(mu[i],tau)  
+        mu[i] <- b0+b10*h[i]+b1*x[i]+b2*w[i]+b3*u[i]+b4*v[i]
+        
+   }
+
+  #Priors
+  b0 ~ dnorm(0,1/10)
+  b1 ~ dnorm(1,1/10)
+  b2 ~ dnorm(1,1/10)
+  b3 ~ dnorm(1,1/10)
+  b4 ~ dnorm(1,1/10)
+  b10 ~ dnorm(3,1)
+  tau ~ dgamma(1,1/10)
+ 
+
+}"
+
+
+simple5_jags <- jags.model(textConnection(simple5), 
+               data= list(y=modelDF2016$`Offense Points`, x=modelDF2016$`Offense cumavg rush`, w=modelDF2016$`Offense cumavg pass`, h=modelDF2016$`Is Home`, u=modelDF2016$`Defense cumavg rush`, v=modelDF2016$`Defense cumavg pass`),
+                    inits=list(.RNG.name="base::Wichmann-Hill", .RNG.seed=1989))
+
+
+simple5_sim <- coda.samples(simple5_jags, variable.names=c("b0","b1","b2","b10","b3","b4","tau"), n.iter=10000)
+   
+simple5_sample <- data.frame(step=1:10000, simple5_sim[[1]])
+head(simple5_sample)
+```
+```{r}
+summary(simple5_sim)
+plot(simple5_sim)
+```
+```{r}
+set.seed(1000)
+predictsimple5 <- function(x,w,u,v,h){
+  rate <- rnorm(10000, simple5_sample$b0 + simple5_sample$b1*x + simple5_sample$b2*w + simple5_sample$b3*u + simple5_sample$b4*v + simple5_sample$b10*h, sqrt(simple5_sample$tau^{-1}))
+  rate<-rate[rate>0]
+  prediction <- rpois(10000,rate)
+}
+
+#prediction with normal distribution instead of poisson dist.(Not as good, why?)
+
+#predictsimple5 <- function(x,w,u,v,h){
+#    prediction <- rnorm(rnorm(10000, simple5_sample$b0 + simple5_sample$b1*x + simple5_sample$b2*w + simple5_sample$b3*u + simple5_sample$b4*v + simple5_sample$b10*h, sqrt(simple5_sample$tau^{-1})))
+#    prediction <- prediction[prediction>0]
+ # }
+
+head(predictsimple5(2,4,2,4,1))
+mean(predictsimple5(2,4,2,4,1))
+```
+```{r}
+set.seed(1000)
+simple_predict5 = data.frame(predictsimple5(2,4,2,4,1))
+colnames(simple_predict5)[1]<- "prediction"
+
+ggplot(simple_predict5, aes(x=prediction)) + geom_histogram(aes(y=..density..))
+
+```
+
+###Test accuracy of prediction
+```{r}
+
+mean(predictsimple5(3.7,8.2,4.8,5.6,0))
+```
+```{r}
+#Looking at 2017 game using our 2016 data simulation.
+#GreenBay scored 23 on the road in week 2. They played the falcons (gave up 6.6 yd/att rushing and 5.3 passing)
+mean(predictsimple5(3,7.4,6.6,5.3,0))
+```
+```{r}
+#Looking at 2014 game using our 2016 data simulation.
+#GreenBay scored 31 at home in week 2 vs the Jets 
+mean(predictsimple5(3.8,5.7,1.7,5.7,1))
+```
+
+
+##Model skeleton for Offensive & Defensive rank to predict score. (Hierarchical structure to draw average of team from average of league?)
+```{r}
+
+main1 <- "model{
+  #Data 
+  for(i in 1:length(y)) {
+        y[i] ~ dpois(lam[i])
+        lam[i] ~ dnorm(mu[i],tau)
+       mu[i] <- b0 + b1*x[i] + b2*w[i] + b10*h[i]
+  }
+
+  #Priors
+  b0 ~ dnorm(0,1/10)
+  b1 ~ dnorm(1,1/10)
+  b2 ~ dnorm(1,1/10)
+  b10 ~ dnorm(3,1)
+  tau ~ dgamma(1,1/10)
+ 
+
+}"
+
+
+main1_jags <- jags.model(textConnection(main1), 
+               data= list(y=modelDF2016$`Offense Points`, x=modelDF2016$O_Points, w=modelDF2016$D_Points, h=modelDF2016$`Is Home`),
+                    inits=list(.RNG.name="base::Wichmann-Hill", .RNG.seed=1989))
+
+
+main1_sim <- coda.samples(main1_jags, variable.names=c("b0","b1","b2","b10","tau"), n.iter=10000)
+   
+main1_sample <- data.frame(step=1:10000, main1_sim[[1]])
+head(main1_sample)
+```
+```{r}
+summary(main1_sim)
+```
+```{r}
+set.seed(1000)
+predictmain1 <- function(x,w,h){
+  rate <- rnorm(10000, main1_sample$b0 + main1_sample$b1*x + main1_sample$b2*w + main1_sample$b10*h, sqrt(main1_sample$tau^{-1}))
+  rate<-rate[rate>0]
+  prediction <- rpois(10000,rate)
+}
+
+# head(predictmain1(.04835,.04045,0))
+# mean(predictmain1(.04835,.04045,0))
+
+```
+```{r}
+set.seed(1000)
+main_predict1 = data.frame(predictmain1(.04045,0.04835,0))
+colnames(main_predict1)[1]<- "prediction"
+
+ggplot(main_predict1, aes(x=prediction)) + geom_histogram(aes(y=..density..))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+###Testing Hierarchical Model
+
+
+```{r}
+#Testing Hierarchical Model
+
+simple1 <- "model{
+  #Data 
+  for(i in 1:length(y)) {
+        y[i] ~ dpois(lam[i])
+        lam[i] ~ dnorm(theda[i], tau)
+
+  for(i in 1:32)
+        theda[i] <- b0+b1*x[i]+b2*w[i] 
+        ab[i] ~ dnorm(averageofleague, precision)
+   }
+
+  #Priors
+  b0 ~ dnorm(0,1/10)
+  b1 ~ dnorm(1,1/10)
+  b2 ~ dnorm(1,1/10)
+  tau ~ dgamma(1,1/10)
+ 
+
+}"
+
+
+simple1_jags <- jags.model(textConnection(simple1), 
+                    data= list(y=data_2016$`Home_Points`, x=data_2016$`Home_Avg Rush Gain`, w=data_2016$`Home_Pass Gain/Att`),
+                    inits=list(.RNG.name="base::Wichmann-Hill", .RNG.seed=1989))
+
+
+simple1_sim <- coda.samples(simple1_jags, variable.names=c("b0","b1","b2","tau"), n.iter=10000)
+   
+simple1_sample <- data.frame(step=1:10000, simple1_sim[[1]])
+head(simple1_sample)
+```
+
+
+
+BaseB <- "model{
+  #Data 
+  for(i in 1:length(x)){
+    x[i] ~ dnorm(theda[i],(1/(0.0658^2)))
+  }
+
+  #Prior
+  for(i in 1:length(x)){
+    theda[i] ~ dnorm(mu,tau)
+  }
+
+  #Hyperprior
+  mu ~ dnorm(0.225, (1/(0.0375^2)))
+  tau ~ dgamma(7,0.035)
+}"
+
+
+bb_jags <- jags.model(textConnection(BaseB), data= list(x=bb$BattingAverage),
+                    inits=list(.RNG.name="base::Wichmann-Hill", .RNG.seed=1989))
+                    
+                    bb_sim <- coda.samples(bb_jags, variable.names=c("theda","mu","tau"), n.iter=10000)
+   
+bb_sample <- data.frame(step=1:10000, bb_sim[[1]])
+head(bb_sample)
+
+
+
+
+
+
+
+#Relationships
+```{r}
+#Create a filtered dataset to ignore early season noise
+modelDF2016Filt <- modelDF2016 %>% filter(Week>6)
+
+
+# ggplot(modelDF2016, aes(y=`Offense Points`,x=`Offense cumavg total rush`)) +
+#   geom_point()
+# ggplot(modelDF2016, aes(y=`Offense Points`,x=`Offense cumavg total pass` + `Offense cumavg total rush`)) +
+#   geom_point()
+#  ggplot(data_2016, aes(x=`Home_Avg Rush Gain`)) +
+#    geom_histogram()
+# ggplot(data_2016, aes(x=`Home_Net Yards Rushing`,y=`Home_Points`)) +
+#   geom_point()
+# ggplot(data_2016, aes(x=`Home_Rushing Plays`,y=`Home_Points`)) +
+#   geom_point()
+# ggplot(data_2016, aes(x=`Home_Net Yards Rushing`+`Home_Net Yards Passing`,y=`Home_Points`)) +
+#   geom_point()
+# ggplot(data_2016, aes(x=`Home_Net Yards Passing`,y=`Home_Points`)) +
+#   geom_point()
+
+# ggplot(data_2016, aes(x=`Away_Avg Rush Gain`,y=`Home_Points`)) +
+#   geom_point()
+# 
+# ggplot(data_2016, aes(x=`Away_Net Yards Rushing`,y=`Home_Points`)) +
+#   geom_point()
+# 
+# ggplot(data_2016, aes(x=`Away_Net Yards Rushing`,y=`Home_Points`)) +
+#   geom_point()
+# 
+# ggplot(modelDF2016Filt, aes(x=`O_Points`,y=`Offense Points`)) +
+#   geom_point() +
+#   xlim(0,.1)
+# 
+# 
+# ggplot(modelDF2016, aes(x=`O_Net Rush`/(`O_Net Rush` +`D_Net Rush`),y=`Offense Points`)) +
+#   geom_point() +
+#   xlim(0.25,.75)
+# 
+# ggplot(modelDF2016Filt, aes(x=`O_Net Rush`/(`O_Net Rush` +`D_Net Rush`),y=`Offense Points`)) +
+#   geom_point() +
+#   xlim(0.25,.75)
+# 
+# ggplot(modelDF2016Filt, aes(x=`O_Avg Rush`/(`O_Avg Rush` +`D_Avg Rush`),y=`Offense Points`)) +
+#   geom_point() +
+#   xlim(0.25,.75)
+# 
+# ggplot(modelDF2016Filt, aes(x=`O_Avg Pass`/(`O_Avg Pass` +`D_Avg Pass`),y=`Offense Points`)) +
+#   geom_point() +
+#   xlim(0.25,.75)
+
+# ggplot(modelDF2016Filt, aes(x=`O_Net Pass`/(`O_Net Pass` +`D_Net Pass`),y=`Offense Points`)) +
+#   geom_point() +
+#   xlim(.2,.8)
+
+# ggplot(filter(modelDF2016,Week>3), aes(x=`O_Points`/(`O_Points` +`D_Points`),y=`Offense Points`)) +
+#   geom_point()+
+#   xlim(.2,.8)
+# 
+# ggplot(filter(modelDF2016,Week>4), aes(x=`O_Points`/(`O_Points` +`D_Points`),y=`Offense Points`)) +
+#   geom_point()+
+#   xlim(.2,.8)
+# 
+# ggplot(filter(modelDF2016,Week>5), aes(x=`O_Points`/(`O_Points` +`D_Points`),y=`Offense Points`)) +
+#   geom_point()+
+#   xlim(.2,.8)
+# 
+# ggplot(filter(modelDF2016,Week>6), aes(x=`O_Points`/(`O_Points` +`D_Points`),y=`Offense Points`)) +
+#   geom_point()+
+#   xlim(.2,.8)
+# 
+# ggplot(filter(modelDF2016,Week>9), aes(x=`O_Points`/(`O_Points` +`D_Points`),y=`Offense Points`)) +
+#   geom_point()+
+#   xlim(.2,.8)
+# 
+# ggplot(filter(modelDF2016,Week>12), aes(x=`O_Points`/(`O_Points` +`D_Points`),y=`Offense Points`)) +
+#   geom_point()+
+#   xlim(.2,.8)
+# 
+# ggplot(filter(modelDF2016,Week>15), aes(x=`O_Points`/(`O_Points` +`D_Points`),y=`Offense Points`)) +
+#   geom_point()+
+#   xlim(.2,.8)
+# 
+# ggplot(filter(modelDF2016,Week>17), aes(x=`O_Points`/(`O_Points` +`D_Points`),y=`Offense Points`)) +
+#   geom_point()+
+#   xlim(.2,.8)
+
+# ggplot(modelDF2016Filt, aes(x=`O_Points`/(`O_Points` +`D_Points`),y=`Offense Points`)) +
+#   geom_point() +
+#   xlim(0.25,.75)
+
+# ggplot(modelDF2016Filt, aes(x=(`O_Avg Pass` + `O_Avg Rush`)/(`O_Avg Pass` +`D_Avg Pass`+`O_Avg Rush` +`D_Avg Rush` ),y=`Offense Points`)) +
+#   geom_point() +
+#   xlim(0.25,.75)
+
+
+# ggplot(modelDF2016Filt, aes(x=`O_Avg Pass` - `D_Avg Pass`,y=`Offense Points`)) +
+#   geom_point() +
+#   xlim(-.02,.02)
+# 
+# ggplot(modelDF2016Filt, aes(x=`O_Avg Pass`,y=`Offense Points`)) +
+#   geom_point() +
+#   xlim(0.01,.05)
+
+
+
+```

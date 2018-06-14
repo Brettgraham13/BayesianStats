@@ -1,0 +1,22 @@
+"0","i <- ""07"""
+"0","paste0(""201709"", i, ""01"")"
+"1","[1]"
+"1"," ""2017090701"""
+"1","
+"
+"0","i <- ""10"""
+"0","paste0(""201709"", i, ""01"")"
+"1","[1]"
+"1"," ""2017091001"""
+"1","
+"
+"0","url <- ""http://www.footballdb.com/games/boxscore.html?gid=2017090701"""
+"0","url %>%"
+"0","    html() %>%"
+"0","    html_nodes(xpath='//*[@id=""leftcol""]/table[1]') %>%"
+"0","    html_table()"
+"2","'html' is deprecated.
+Use 'read_html' instead.
+See help(""Deprecated"")"
+"1","[[1]]
+"

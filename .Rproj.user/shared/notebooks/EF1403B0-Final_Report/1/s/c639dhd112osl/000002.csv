@@ -1,0 +1,6 @@
+"0","initOffenseDefense = function(graph) {"
+"0","  num_vertices = length(V(graph))"
+"0","  offense = rep(1,num_vertices)"
+"0","  defense = rep(1,num_vertices)"
+"0","  list(offense=offense,defense=defense)"
+"0","}"

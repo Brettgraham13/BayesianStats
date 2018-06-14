@@ -1,0 +1,420 @@
+---
+title: "Checkpoint 5"
+author: "Gunnar Goeden & Brett Graham"
+date: "11/30/2017"
+output: html_document
+---
+##Progress Made
+Objective: Identify potential research questions and further develop and analyze 2-3 Bayesian models for each research question.
+
+Summary: Going into this checkpoint, we had a pre-determined goal or research question that we wanted to address, so we spent our time on this checkpoint developing simple models to address this question, and worked on ways to improve them. Our ultimate research question is: Can we accurately predict the scores of NFL games based on a model which incorporates an offensive and deffensive ability score, which will update as data is recieved from previous games. For this checkpoint, we developed 3 simple models, each building off of the next to learn what our final model will look like. Simple model 1 is a basic Bayesian regression model using a Normal distribution to determine the teams score based on the teams offensive avg rush yards per attempt and avg pass yards per attempt. Simple model 2 builds off of this idea, but uses a Poisson Distribution so we do not have any negative scores. Simple model 3 we did a Poisson Dist with a logged normal structure. Conducting some research, we found literature to suggest that this is the structure we may want to use going forward. Our next steps are to finalize a two-way data matrix, which will allow us to use offensive and defensive scores, and incorporate both into our prediction model. We will also continue to fine-tune our priors for more accurate results.
+
+##Work Distribution
+Both of us spent time thinking and discussing what models we wanted to use, defining our variables, and brainstorming how we want to construct these models (both simple and going forward). Aside from this collaborative work, Brett worked on developing the two-way data matrix and forming the offensive and defensive score variables, while Gunnar constructed the simple models in rjags and created visual plots to analyze progress results.
+
+##Coding & Models
+```{r,echo=FALSE}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(readr)
+library(igraph)
+library(rjags)
+library(xml2)
+library(rvest)
+```
+```{r,echo=FALSE}
+url <- "http://www.footballdb.com/games/boxscore.html?gid=2017091001"
+
+#Reading the HTML code from the website
+webpage <- read_html(url)
+
+title_data_html <- html_nodes(webpage,"#divBox_team tbody .left")
+title_data <- html_text(title_data_html)
+title_data <- append(c("Team", "Points"), title_data)
+
+# #Create boxscore 
+# boxscore <- data.frame(Category = title_data, Home = home_data, Away = away_data)
+
+#Create game event (single row that describes game)
+home_variables <- paste0(rep("Home_",length(title_data)),title_data)
+away_variables <- paste0(rep("Away_",length(title_data)),title_data)
+event_variables <- append(home_variables,away_variables)
+event_variables <- append(c("Date","Week"),event_variables)
+
+length(event_variables)
+
+```
+
+```{r,echo=FALSE}
+createDateVector <- function(year){
+  url <- paste0('http://www.footballdb.com/games/index.html?lg=NFL&yr=',toString(year))
+  webpage <- read_html(url)
+  date_html <- html_nodes(webpage,'td:nth-child(1) .hidden-xs')
+  date_data <- html_text(date_html)
+  dateVect <- as.Date(date_data,"%m/%d/%Y")
+  
+  today = today()
+  daysBeforeToday = dateVect <today
+  dateVect = dateVect[daysBeforeToday]
+}
+```
+
+```{r,echo=FALSE}
+dateToURL <- function(dateVect, i, adjustment=0){
+  url_base <- 'http://www.footballdb.com/games/boxscore.html?gid='
+  url_year = year(dateVect[i])
+  if(month(dateVect[i])<10){
+    url_month <- paste0("0",month(dateVect[i]))
+  }else{
+    (url_month <-toString(month(dateVect[i])))
+   }
+  if(day(dateVect[i])<10){
+    url_day <- paste0("0",day(dateVect[i]))
+  }else{
+    url_day <-toString(day(dateVect[i]))
+  }
+  
+  gameNum = 1
+  location = i-1
+  if(location >0){
+    while(dateVect[i]==dateVect[location]){
+      gameNum = gameNum+1
+      location=location-1
+      
+      if(location==0){
+        break
+      }
+    }
+  }
+  
+  gameNum = gameNum + adjustment
+  
+  if(gameNum<10){
+    url_gamenum <- paste0("0",toString(gameNum))
+  }else{
+    url_gamenum <-toString(gameNum)
+  }
+
+  url <- paste0(url_base,url_year,url_month,url_day,toString(url_gamenum))
+
+  
+  return(list(url=url,url_year=url_year,url_month = url_month,url_day=url_day))
+}
+```
+```{r,echo=FALSE}
+yearlyStats <- function(dateVect){
+  data = matrix(rep('',length(event_variables)),nrow=1)
+  
+  for(i in 1:length(dateVect)){
+
+
+    url_info <- dateToURL(dateVect,i)
+    url <- url_info$url
+    
+    webpage <- read_html(url)
+  
+  
+    away_data_html <- html_nodes(webpage,'#divBox_team .row1 .left+ td , .section_left .left+ td .hidden-xs , #divBox_team .row0 .left+ td')
+    away_data <- html_text(away_data_html)
+    away_points <- html_text(html_nodes(webpage,'#leftcol .header+ .center td+ td b'))
+    away_data <- append(away_data,away_points, after = 1)
+  
+    home_data_html <- html_nodes(webpage,"#divBox_team .row1 .left~ td+ td , #divBox_team .row0 .left~ td+ td , .section_left .left~ td+ td .hidden-xs")
+    home_data <- html_text(home_data_html)
+    home_points <- html_text(html_nodes(webpage,'#leftcol .row0+ .center td+ td b'))
+    home_data <- append(home_data,home_points, after = 1)
+    
+    week_info <- html_text(html_nodes(webpage,'#breadcrumbs a~ a+ a'))
+  
+    date = paste0(url_info$url_month,"/",url_info$url_day,"/",url_info$url_year)
+    date = append(date,week_info)
+    game_data = append(date,home_data)
+    game_data = append(game_data,away_data)
+    
+    
+    
+    adjustment = 1
+    while(length(game_data)==2 |length(game_data)==1){
+      url <- dateToURL(dateVect,i,adjustment = adjustment)$url
+    
+      webpage <- read_html(url)
+    
+      away_data_html <- html_nodes(webpage,'#divBox_team .row1 .left+ td , .section_left .left+ td .hidden-xs , #divBox_team .row0 .left+ td')
+      away_data <- html_text(away_data_html)
+      away_points <- html_text(html_nodes(webpage,'#leftcol .header+ .center td+ td b'))
+      away_data <- append(away_data,away_points, after = 1)
+    
+      home_data_html <- html_nodes(webpage,"#divBox_team .row1 .left~ td+ td , #divBox_team .row0 .left~ td+ td , .section_left .left~ td+ td .hidden-xs")
+      home_data <- html_text(home_data_html)
+      home_points <- html_text(html_nodes(webpage,'#leftcol .row0+ .center td+ td b'))
+      home_data <- append(home_data,home_points, after = 1)
+      
+      week_info <- html_text(html_nodes(webpage,'#breadcrumbs a~ a+ a'))
+
+    
+      date = paste0(url_info$url_month,"/",url_info$url_day,"/",url_info$url_year)
+      date = append(date,week_info)
+      game_data = append(date,home_data)
+      game_data = append(game_data,away_data)
+    
+      adjustment = adjustment+1
+    
+    
+      if(adjustment >100){
+        print("ERROR: ADJUSTMENT TOO LARGE")
+        print(i)
+        break
+      }
+  
+    }
+    data = rbind(data,game_data)
+  
+  }
+  return(data)
+}
+```
+```{r,echo=FALSE}
+createDataframe <- function(year){
+  dateVect = createDateVector(year)
+  data_mat = yearlyStats(dateVect)
+  data_mat = data_mat[-1,]
+  game_stats <- data.frame(data_mat)
+  names(game_stats)[1:length(event_variables)] <- event_variables
+  names(game_stats)[c(12,40)] <- c('Home_Avg Rush Gain','Away_Avg Rush Gain')
+  return(game_stats)
+    
+}
+```
+```{r,echo=FALSE}
+modifyWeek <- function(dataframe){
+#Modifies week variable from a string to a number
+  modifiedData <- dataframe
+  week <- dataframe$`Week`
+  
+  weekNum <- extract_numeric(week)
+  wildcard <- grepl("Wild",week)
+  division <- grepl("Divisional",week)
+  conference <- grepl("Conference",week)
+  super <- grepl("Super",week)
+
+  for(i in 1:length(weekNum)){
+    if(is.na(weekNum[i])){
+      if(wildcard[i]){
+        weekNum[i] <- 18
+      } else if(division[i]){
+        weekNum[i]<-19
+      } else if(conference[i]){
+        weekNum[i]<-20
+      } else if(super[i]){
+        weekNum[i] <-21
+      }
+    }
+  }
+  
+  modifiedData$`Week` <- weekNum
+  return(modifiedData)
+}
+
+simplify <- function(dataframe){
+#Modifies the full dataset to only include columns of interest
+ 
+   modifiedData <- dataframe %>% 
+    select(Date:Home_Points,contains('Home_Net Yards Rushing'):contains('Home_Avg. Yds/Att'),Away_Team,Away_Points,contains('Away_Net Yards Rushing'):contains('Away_Avg. Yds/Att'),-contains('Home_Sacked'):-contains('Home_Gross'),-contains('Away_Sacked'):-contains('Away_Gross')) %>%
+    separate(`Away_Att - Comp - Int`,c('Away_Att','Away_Comp','Away_Int')) %>%
+    separate(`Home_Att - Comp - Int`,c('Home_Att','Home_Comp','Home_Int')) %>%
+    select(-`Home_Comp`,-`Home_Int`,-`Away_Comp`,-`Away_Int`) 
+ 
+  #Converts vectors that contain numbers to type double
+  numVectors = (1:ncol(modifiedData))[-c(1,2,3,11)]
+  modifiedData[,numVectors] <- data.frame(apply(modifiedData[,numVectors], 2, as.factor))
+  modifiedData[,numVectors] <- data.frame(apply(modifiedData[,numVectors], 2, as.numeric))
+  
+  #Converts vectors that are not numbers to characters
+  modifiedData[,c(1,2,3,11)] <- data.frame(apply(modifiedData[,c(1,2,3,11)], 2, as.factor))
+  modifiedData[,c(1,2,3,11)] <- data.frame(apply(modifiedData[,c(1,2,3,11)], 2, as.character))
+  
+  #Adjust Average Passing Yards/Attempt Stat to Net yards, not Gross yards
+  modifiedData$`Home_Pass Gain/Att` = modifiedData$`Home_Net Yards Passing`/modifiedData$`Home_Att`
+  modifiedData$`Away_Pass Gain/Att` = modifiedData$`Away_Net Yards Passing`/modifiedData$`Away_Att`
+  
+  modifiedData <- modifyWeek(modifiedData)
+  modifiedData <- modifiedData[,c(1:9,19,11:17,20,10,18)]
+  modifiedData <- modifiedData[,-c(19,20)]
+
+  return(modifiedData)
+}
+```
+
+```{r}
+game_stats_2016 <- createDataframe(2016)
+data_2016 <- simplify(game_stats_2016)
+```
+
+
+###First model to predict points scored by a team using their rush yards/att and pass yards/att in the given game
+```{r}
+#PLoting a simple Bayesian regression model using avg rush yds/att and avg pass yds/att
+
+simple1 <- "model{
+  #Data 
+  for(i in 1:length(y)) {
+        y[i] ~ dnorm(mu[i], tau)
+        mu[i] <- b0+b1*x[i]+b2*w[i] 
+        
+   }
+
+  #Priors
+  b0 ~ dnorm(0,1/10)
+  b1 ~ dnorm(1,1/10)
+  b2 ~ dnorm(1,1/10)
+  tau ~ dgamma(1,1/10)
+ 
+
+}"
+
+
+simple1_jags <- jags.model(textConnection(simple1), 
+                    data= list(y=data_2016$`Home_Points`, x=data_2016$`Home_Avg Rush Gain`, w=data_2016$`Home_Pass Gain/Att`),
+                    inits=list(.RNG.name="base::Wichmann-Hill", .RNG.seed=1989))
+
+
+simple1_sim <- coda.samples(simple1_jags, variable.names=c("b0","b1","b2","tau"), n.iter=10000)
+   
+simple1_sample <- data.frame(step=1:10000, simple1_sim[[1]])
+head(simple1_sample)
+```
+```{r}
+summary(simple1_sim)
+plot(simple1_sim)
+```
+```{r}
+set.seed(1000)
+predictsimple1 <- function(x,w){
+  rnorm(10000, -1.78594 + 1.31796*x + 2.89480*w, 0.01842^{-1})
+}
+  
+head(predictsimple1(4,8))
+mean(predictsimple1(4,8))
+```
+```{r}
+
+ggplot(data_2016, aes(x=`Home_Pass Gain/Att`,y=`Home_Points`)) + 
+ geom_point()
+simple_predict = data.frame(predictsimple1(4,8))
+colnames(simple_predict)[1]<- "prediction"
+
+ggplot(simple_predict, aes(x=prediction)) + geom_histogram(aes(y=..density..))
+```
+
+##Second model to predict points scored by a team using their rush yards/att and pass yards/att in the given game. Adjustment to Pois dist for non-negative points ***
+```{r}
+#PLoting a simple Bayesian regression model using avg rush yds/att and avg pass yds/att
+
+simple2 <- "model{
+  #Data 
+  for(i in 1:length(y)) {
+        y[i] ~ dpois(lam[i])
+        lam[i] ~ dnorm(mu[i],tau)  
+        mu[i] <- b0+b1*x[i]+b2*w[i]
+        
+   }
+
+  #Priors
+  b0 ~ dnorm(0,1/10)
+  b1 ~ dnorm(1,1/10)
+  b2 ~ dnorm(1,1/10)
+  tau ~ dgamma(1,1/10)
+ 
+
+}"
+
+
+simple2_jags <- jags.model(textConnection(simple2), 
+                    data= list(y=data_2016$`Home_Points`, x=data_2016$`Home_Avg Rush Gain`, w=data_2016$`Home_Pass Gain/Att`),
+                    inits=list(.RNG.name="base::Wichmann-Hill", .RNG.seed=1989))
+
+
+simple2_sim <- coda.samples(simple2_jags, variable.names=c("b0","b1","b2","tau"), n.iter=10000)
+   
+simple2_sample <- data.frame(step=1:10000, simple2_sim[[1]])
+head(simple2_sample)
+```
+```{r}
+summary(simple2_sim)
+plot(simple2_sim)
+```
+```{r}
+set.seed(1000)
+predictsimple2 <- function(x,w){
+  rate <- rnorm(10000, simple2_sample$b0 + simple2_sample$b1*x + simple2_sample$b2*w, sqrt(simple2_sample$tau^{-1}))
+  rate<-rate[rate>0]
+  prediction <- rpois(10000,rate)
+}
+  
+head(predictsimple2(4,8))
+mean(predictsimple2(4,8))
+```
+```{r}
+simple_predict2 = data.frame(predictsimple2(4,8))
+colnames(simple_predict2)[1]<- "prediction"
+
+ggplot(simple_predict2, aes(x=prediction)) + geom_histogram(aes(y=..density..))
+
+```
+
+
+##Third model to predict points scored by a team using their rush yards/att and pass yards/att in the given game. Adjustment to Pois dist for non-negative points, attempt at log-normal model used in literature.
+```{r}
+
+simple3 <- "model{
+  #Data 
+  for(i in 1:length(y)) {
+        y[i] ~ dpois(lam[i])
+        log(lam[i]) <-b0+b1*x[i]+b2*w[i]  
+         
+        
+   }
+
+  #Priors
+  b0 ~ dnorm(0,1/10)
+  b1 ~ dnorm(1,1/10)
+  b2 ~ dnorm(1,1/10)
+  tau ~ dgamma(1,1/10)
+ 
+
+}"
+
+
+simple3_jags <- jags.model(textConnection(simple3), 
+                    data= list(y=data_2016$`Home_Points`, x=data_2016$`Home_Avg Rush Gain`, w=data_2016$`Home_Pass Gain/Att`),
+                    inits=list(.RNG.name="base::Wichmann-Hill", .RNG.seed=1989))
+
+
+simple3_sim <- coda.samples(simple3_jags, variable.names=c("b0","b1","b2","tau"), n.iter=10000)
+   
+simple3_sample <- data.frame(step=1:10000, simple3_sim[[1]])
+head(simple3_sample)
+```
+```{r}
+summary(simple3_sim)
+plot(simple3_sim)
+```
+```{r}
+set.seed(1000)
+predictsimple3 <- function(x,w){
+  rate <- rnorm(10000, 2.12177 + 0.05209*x + 0.11608*w, 10.04231^{-1})
+  rate<-rate[rate>0]
+  prediction <- rpois(10000,rate)
+}
+  
+head(predictsimple3(4,8))
+mean(predictsimple3(4,8))
+```
+```{r}
+simple_predict3 = data.frame(predictsimple3(4,8))
+colnames(simple_predict3)[1]<- "prediction"
+
+ggplot(simple_predict3, aes(x=prediction)) + geom_histogram(aes(y=..density..))
+```

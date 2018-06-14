@@ -1,0 +1,274 @@
+---
+title: "Checkpoint 4"
+author: "Gunnar Goeden & Brett Graham"
+date: "11/21/2017"
+output: html_document
+---
+##Progress Made
+Objective: Perform an exploratory analysis of the data. Construct visuals and summary statistics. Present all Rstudio code such that the experiment and collection/cleaning is repeatable.
+
+Summary: For this checkpoint, we expanded and included additional data that we were not able to collect by the previous checkpoint deadline. After obtaining this data, we cleaned it and simplified it to represent the data sets we will look to use in our model. This process included scraping the data from the source specified in the previous checkpoint, generating a data frame of all the relevant data, cleaning the data to include variables we want to examine, and change all numeric values into numeric data points. Additionally, to meet the requirements of this checkpoint we found basic summary statistics for select variables and ploted their distributions.
+
+##Work Distribution
+Brett worked a great deal on the coding behind attaining the more advanced data, as well as the code for cleaning and simplifying the data. Gunnar assisted with the data cleaning, caluculated the summary statistics, and summarized the work & progress.
+
+
+
+##Code and Data
+###Collecting
+```{r}
+library(xml2)
+library(rvest)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+```
+```{r}
+createDateVector <- function(year){
+  url <- paste0('http://www.footballdb.com/games/index.html?lg=NFL&yr=',toString(year))
+  webpage <- read_html(url)
+  date_html <- html_nodes(webpage,'td:nth-child(1) .hidden-xs')
+  date_data <- html_text(date_html)
+  dateVect <- as.Date(date_data,"%m/%d/%Y")
+  
+  today = today()
+  daysBeforeToday = dateVect <today
+  dateVect = dateVect[daysBeforeToday]
+}
+```
+```{r}
+url <- "http://www.footballdb.com/games/boxscore.html?gid=2017091001"
+
+#Reading the HTML code from the website
+webpage <- read_html(url)
+
+title_data_html <- html_nodes(webpage,"#divBox_team tbody .left")
+title_data <- html_text(title_data_html)
+title_data <- append(c("Team", "Points"), title_data)
+
+# #Create boxscore 
+# boxscore <- data.frame(Category = title_data, Home = home_data, Away = away_data)
+
+#Create game event (single row that describes game)
+home_variables <- paste0(rep("Home_",length(title_data)),title_data)
+away_variables <- paste0(rep("Away_",length(title_data)),title_data)
+event_variables <- append(home_variables,away_variables)
+event_variables <- append(c("Date","Week"),event_variables)
+
+length(event_variables)
+
+```
+```{r}
+dateToURL <- function(dateVect, i, adjustment=0){
+  url_base <- 'http://www.footballdb.com/games/boxscore.html?gid='
+  url_year = year(dateVect[i])
+  if(month(dateVect[i])<10){
+    url_month <- paste0("0",month(dateVect[i]))
+  }else{
+    (url_month <-toString(month(dateVect[i])))
+   }
+  if(day(dateVect[i])<10){
+    url_day <- paste0("0",day(dateVect[i]))
+  }else{
+    url_day <-toString(day(dateVect[i]))
+  }
+  
+  gameNum = 1
+  location = i-1
+  if(location >0){
+    while(dateVect[i]==dateVect[location]){
+      gameNum = gameNum+1
+      location=location-1
+      
+      if(location==0){
+        break
+      }
+    }
+  }
+  
+  gameNum = gameNum + adjustment
+  
+  if(gameNum<10){
+    url_gamenum <- paste0("0",toString(gameNum))
+  }else{
+    url_gamenum <-toString(gameNum)
+  }
+
+  url <- paste0(url_base,url_year,url_month,url_day,toString(url_gamenum))
+
+  
+  return(list(url=url,url_year=url_year,url_month = url_month,url_day=url_day))
+}
+```
+```{r}
+yearlyStats <- function(dateVect){
+  data = matrix(rep('',length(event_variables)),nrow=1)
+  
+  for(i in 1:length(dateVect)){
+
+    url_info <- dateToURL(dateVect,i)
+    url <- url_info$url
+    
+    webpage <- read_html(url)
+  
+  
+    away_data_html <- html_nodes(webpage,'#divBox_team .row1 .left+ td , .section_left .left+ td .hidden-xs , #divBox_team .row0 .left+ td')
+    away_data <- html_text(away_data_html)
+    away_points <- html_text(html_nodes(webpage,'#leftcol .header+ .center td+ td b'))
+    away_data <- append(away_data,away_points, after = 1)
+  
+    home_data_html <- html_nodes(webpage,"#divBox_team .row1 .left~ td+ td , #divBox_team .row0 .left~ td+ td , .section_left .left~ td+ td .hidden-xs")
+    home_data <- html_text(home_data_html)
+    home_points <- html_text(html_nodes(webpage,'#leftcol .row0+ .center td+ td b'))
+    home_data <- append(home_data,home_points, after = 1)
+    
+    week_info <- html_text(html_nodes(webpage,'#breadcrumbs a~ a+ a'))
+  
+    date = paste0(url_info$url_month,"/",url_info$url_day,"/",url_info$url_year)
+    date = append(date,week_info)
+    game_data = append(date,home_data)
+    game_data = append(game_data,away_data)
+    
+    
+    
+    adjustment = 1
+    while(length(game_data)==2 |length(game_data)==1){
+      url <- dateToURL(dateVect,i,adjustment = adjustment)$url
+    
+      webpage <- read_html(url)
+    
+      away_data_html <- html_nodes(webpage,'#divBox_team .row1 .left+ td , .section_left .left+ td .hidden-xs , #divBox_team .row0 .left+ td')
+      away_data <- html_text(away_data_html)
+      away_points <- html_text(html_nodes(webpage,'#leftcol .header+ .center td+ td b'))
+      away_data <- append(away_data,away_points, after = 1)
+    
+      home_data_html <- html_nodes(webpage,"#divBox_team .row1 .left~ td+ td , #divBox_team .row0 .left~ td+ td , .section_left .left~ td+ td .hidden-xs")
+      home_data <- html_text(home_data_html)
+      home_points <- html_text(html_nodes(webpage,'#leftcol .row0+ .center td+ td b'))
+      home_data <- append(home_data,home_points, after = 1)
+      
+      week_info <- html_text(html_nodes(webpage,'#breadcrumbs a~ a+ a'))
+
+    
+      date = paste0(url_info$url_month,"/",url_info$url_day,"/",url_info$url_year)
+      date = append(date,week_info)
+      game_data = append(date,home_data)
+      game_data = append(game_data,away_data)
+    
+      adjustment = adjustment+1
+    
+    
+      if(adjustment >100){
+        print("ERROR: ADJUSTMENT TOO LARGE")
+        print(i)
+        break
+      }
+  
+    }
+    data = rbind(data,game_data)
+  
+  }
+  return(data)
+}
+```
+```{r}
+createDataframe <- function(year){
+  dateVect = createDateVector(year)
+  data_mat = yearlyStats(dateVect)
+  data_mat = data_mat[-1,]
+  game_stats <- data.frame(data_mat)
+  names(game_stats)[1:length(event_variables)] <- event_variables
+  names(game_stats)[c(12,40)] <- c('Home_Avg Rush Gain','Away_Avg Rush Gain')
+
+  return(game_stats)
+    
+}
+```
+```{r}
+# game_stats_2014 <- createDataframe(2014)
+# game_stats_2015 <- createDataframe(2015)
+# game_stats_2016 <- createDataframe(2016)
+game_stats_2017 <- createDataframe(2017)
+```
+### Data Manipulation
+Only useful columns:
+```{r}
+simplify <- function(dataframe){
+  modifiedData <- dataframe %>% 
+    select(Date:Home_Points,contains('Home_Net Yards Rushing'):contains('Home_Avg. Yds/Att'),Away_Team,Away_Points,contains('Away_Net Yards Rushing'):contains('Away_Avg. Yds/Att'),-contains('Home_Sacked'):-contains('Home_Gross'),-contains('Away_Sacked'):-contains('Away_Gross')) %>%
+    separate(`Away_Att - Comp - Int`,c('Away_Att','Away_Comp','Away_Int')) %>%
+    separate(`Home_Att - Comp - Int`,c('Home_Att','Home_Comp','Home_Int')) %>%
+    select(-`Home_Comp`,-`Home_Int`,-`Away_Comp`,-`Away_Int`) 
+ 
+  modifiedData$`Home_Att`<-as.numeric(as.character(modifiedData$`Home_Att`))
+  
+  
+  # numVectors = 1:length(ncol(modifiedData))[-c(-1,-2,-3,-11)]
+  # for(i in 1:length(numVectors)){
+  #   modifiedData[,i] <- as.numeric(as.character(modifiedData[,i]))
+  # }
+  
+  return(modifiedData)
+}
+```
+```{r}
+data_2017 <- simplify(game_stats_2017)
+data_2017 <- data_2017[-nrow(data_2017),]
+
+ #View(data_2017)
+```
+```{r}
+
+HomePoints <- as.numeric(as.character(data_2017$Home_Points))
+HomeNetRushYards <- as.numeric(as.character(data_2017$`Home_Net Yards Rushing`))
+HomeRushPlays <- as.numeric(as.character(data_2017$`Home_Rushing Plays`))
+HomeAvgRushGain <- as.numeric(as.character(data_2017$`Home_Avg Rush Gain`))
+HomeNetPassYards <- as.numeric(as.character(data_2017$`Home_Net Yards Passing`))
+HomePassAtt <- as.numeric(as.character(data_2017$Home_Att))
+HomeAvgPassPerAtt <- as.numeric(as.character(data_2017$`Home_Avg. Yds/Att`))
+
+AwayPoints <- as.numeric(as.character(data_2017$Away_Points))
+AwayNetRushYards <- as.numeric(as.character(data_2017$`Away_Net Yards Rushing`))
+AwayRushPlays <- as.numeric(as.character(data_2017$`Away_Rushing Plays`))
+AwayAvgRushGain <- as.numeric(as.character(data_2017$`Away_Avg Rush Gain`))
+AwayNetPassYards <- as.numeric(as.character(data_2017$`Away_Net Yards Passing`))
+AwayPassAtt <- as.numeric(as.character(data_2017$Away_Att))
+AwayAvgPassPerAtt <- as.numeric(as.character(data_2017$`Away_Avg. Yds/Att`))
+
+```
+
+```{r}
+CleanData_2017 <- data.frame(Date = data_2017$Date, Week = data_2017$Week, Home_Team = data_2017$Home_Team, Home_Points = HomePoints, HomeNetRushYards = HomeNetRushYards, Home_Rush_Plays = HomeRushPlays, Home_Average_Rush_Gain = HomeAvgRushGain, Home_Net_Passing_Yards = HomeNetPassYards, Home_Pass_Attempts = HomePassAtt, Home_Avg_YardsPerPassAtt = HomeAvgPassPerAtt, Away_Team = data_2017$Away_Team, Away_Points = AwayPoints, AwayNetRushYards = AwayNetRushYards, Away_Rush_Plays = AwayRushPlays, Away_Average_Rush_Gain = AwayAvgRushGain, Away_Net_Passing_Yards = AwayNetPassYards, Away_Pass_Attempts = AwayPassAtt, Away_Avg_YardsPerPassAtt = AwayAvgPassPerAtt)
+
+
+CleanData_2017 <- CleanData_2017[-nrow(CleanData_2017),]
+#View(CleanData_2017)
+```
+### Summary Statistics
+```{r}
+sumstats <- function(x){
+  avg = mean(x) 
+  sd = sd(x)
+  return(list(avg=avg,sd=sd))
+}
+ sumstats(CleanData_2017$Home_Points)
+ sumstats(CleanData_2017$Away_Points)
+ sumstats(CleanData_2017$Home_Average_Rush_Gain)
+ sumstats(CleanData_2017$Home_Avg_YardsPerPassAtt)
+ sumstats(CleanData_2017$Away_Average_Rush_Gain)
+ sumstats(CleanData_2017$Away_Avg_YardsPerPassAtt)
+ 
+```
+
+```{r}
+ggplot(CleanData_2017, aes(x=CleanData_2017$Home_Points)) + 
+    geom_histogram()
+ggplot(CleanData_2017, aes(x=CleanData_2017$Away_Points)) +
+  geom_histogram()
+ggplot(CleanData_2017, aes(x=CleanData_2017$Home_Average_Rush_Gain)) +
+  geom_histogram()
+ggplot(CleanData_2017, aes(x=CleanData_2017$Home_Avg_YardsPerPassAtt)) +
+  geom_histogram()
+```
+

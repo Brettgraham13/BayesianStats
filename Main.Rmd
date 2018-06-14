@@ -1,0 +1,608 @@
+---
+title: "Main"
+author: "Brett Graham"
+date: "11/14/2017"
+output: html_document
+---
+```{r}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(readr)
+library(igraph)
+```
+### Functions
+```{r}
+modifyWeek <- function(dataframe){
+#Modifies week variable from a string to a number
+  modifiedData <- dataframe
+  week <- dataframe$`Week`
+  
+  weekNum <- extract_numeric(week)
+  wildcard <- grepl("Wild",week)
+  division <- grepl("Divisional",week)
+  conference <- grepl("Conference",week)
+  super <- grepl("Super",week)
+
+  for(i in 1:length(weekNum)){
+    if(is.na(weekNum[i])){
+      if(wildcard[i]){
+        weekNum[i] <- 18
+      } else if(division[i]){
+        weekNum[i]<-19
+      } else if(conference[i]){
+        weekNum[i]<-20
+      } else if(super[i]){
+        weekNum[i] <-21
+      }
+    }
+  }
+  
+  modifiedData$`Week` <- weekNum
+  return(modifiedData)
+}
+
+simplify <- function(dataframe){
+#Modifies the full dataset to only include columns of interest
+ 
+   modifiedData <- dataframe %>%  
+    select(Date:Home_Points,contains('Home_Net Yards Rushing'):contains('Home_Avg. Yds/Att'),Away_Team,Away_Points,contains('Away_Net Yards Rushing'):contains('Away_Avg. Yds/Att'),-contains('Home_Sacked'):-contains('Home_Gross'),-contains('Away_Sacked'):-contains('Away_Gross')) %>%
+    separate(`Away_Att - Comp - Int`,c('Away_Att','Away_Comp','Away_Int')) %>%
+    separate(`Home_Att - Comp - Int`,c('Home_Att','Home_Comp','Home_Int')) %>%
+    select(-`Home_Comp`,-`Home_Int`,-`Away_Comp`,-`Away_Int`) 
+ 
+
+  
+  #Converts vectors that are not numbers to characters
+  modifiedData[,c(1,3,11)] <- data.frame(apply(modifiedData[,c(1,3,11)], 2, as.factor))
+  modifiedData[,c(1,3,11)] <- data.frame(apply(modifiedData[,c(1,3,11)], 2, as.character))
+
+  
+  #Converts vectors that contain numbers to type double
+  numVectors = (1:ncol(modifiedData))[-c(1,2,3,11)]
+  modifiedData[,numVectors] <- data.frame(apply(modifiedData[,numVectors], 2, as.factor))
+  modifiedData[,numVectors] <- data.frame(apply(modifiedData[,numVectors], 2, as.numeric))
+  
+  
+  
+
+
+  
+  #Adjust Average Passing Yards/Attempt Stat to Net yards, not Gross yards
+  modifiedData$`Home_Pass Gain/Att` = modifiedData$`Home_Net Yards Passing`/modifiedData$`Home_Att`
+  modifiedData$`Away_Pass Gain/Att` = modifiedData$`Away_Net Yards Passing`/modifiedData$`Away_Att`
+  
+  modifiedData <- modifyWeek(modifiedData)
+  modifiedData <- modifiedData[,c(1:9,19,11:17,20,10,18)]
+  modifiedData <- modifiedData[,-c(19,20)]
+  
+  modifiedData <- modifiedData %>%
+    mutate_each_( funs(as.character(.)), names( .[,sapply(., is.factor)] ))
+
+  return(modifiedData)
+}
+```
+```{r}
+dataToGraph <- function(dataframe,week,stat){
+#Convert the season data to a graph format
+#week is the last week that you have data for i.e. use week = 7 to make predictions for week 8
+#stat is the column number of the home stat that you want to observe
+  
+  homeCol = stat
+  awayCol = stat + 8
+  
+  modifiedData <- dataframe %>%
+    filter(Week < week) %>%
+    select(Home_Team,Away_Team,homeCol,awayCol) 
+  
+  home_data = modifiedData[,-c(4)]
+  colnames(home_data)[3] = 'weight'
+  away_data = modifiedData[,c(2,1,4,3)]
+  away_data = away_data[,-c(4)]
+  colnames(away_data)[3] = 'weight'
+
+  
+  h = graph.data.frame(home_data,directed = TRUE)
+  h$weight <- home_data[,3]
+  a = graph.data.frame(away_data,directed=TRUE)
+  a$weight <- away_data[,3]
+  
+  g = union(h,a)
+  
+  E(g)$weight_1[is.na(E(g)$weight_1)]<-0
+  E(g)$weight_2[is.na(E(g)$weight_2)]<-0
+  E(g)$weight <- E(g)$weight_1 +E(g)$weight_2
+  
+  g<- delete_edge_attr(g,'weight_1')
+  g<- delete_edge_attr(g,'weight_2')
+
+  
+  return(g)
+}
+```
+```{r}
+initOffenseDefense = function(graph) {
+  num_vertices = length(V(graph))
+  offense = rep(1,num_vertices)
+  defense = rep(1,num_vertices)
+  list(offense=offense,defense=defense)
+}
+
+
+
+```
+
+```{r}
+
+update = function(A,o,games_ratios) {
+  (t(A) %*% (1/(games_ratios*(A %*% (1/o)))))* games_ratios 
+}
+
+run_alg = function(A,o,games_ratios,epsilon = 0.5*10^-4) {
+  diff = Inf
+  while(diff > epsilon) {
+    new_o = update(A,o,games_ratios)
+    diff = sqrt(t(new_o - o) %*% (new_o - o))
+    o = new_o
+  }
+  return(o)
+}
+
+get_games_ratios = function(g) {
+  max(degree(g))/degree(g)
+}
+get_defense = function(A,o,games_ratios) {
+  (A %*% (1/o)) * games_ratios
+}
+
+
+calculateOD <- function(g, e = .5*10^-5){
+  #initialize offense vectors to have every team with an offensive score of 1
+  offense = rep(1,length(V(g)))
+  
+  Adj = as.matrix(get.adjacency(g,attr='weight'))
+  Adj = Adj + e*(offense %*% t(offense) - diag(length(V(g))))
+  Adj = t(Adj)
+
+  games_ratios = get_games_ratios(g)
+  
+  final_offense = run_alg(Adj, offense,games_ratios,epsilon = e)
+  final_defense = get_defense(Adj,final_offense,games_ratios)
+  
+  # offenseVect = final_offense - mean(final_offense)
+  offenseVect =final_offense / sum(final_offense)
+  offenseVect = offenseVect - mean(offenseVect)
+  # offenseVect = offenseVect[order(offenseVect,decreasing = TRUE),,drop=FALSE]
+  
+  defenseVect = 1/(final_defense) 
+  defenseVect = defenseVect/sum(defenseVect)
+  defenseVect = defenseVect - mean(defenseVect)
+  # defenseVect = defenseVect[order(defenseVect,decreasing = TRUE),,drop=FALSE]
+  
+  return(list(offense = offenseVect, defense = defenseVect))
+}
+
+createODDF <- function(rawData){
+  data <- simplify(rawData)
+
+  teamData <- data.frame()
+  
+  #calculate OD 
+  columns = c(5,7,8,10)
+  for(i in 2:max(data$Week)){
+  #Create DF based on OD for points
+    OD <- calculateOD(dataToGraph(data,i,4))
+    offense <-OD$offense
+    defense <- OD$defense
+    
+    week = rep(i,length(offense))
+    teams <- names(offense[,1])
+    
+    weeklyDF <- data.frame(week,teams,offense,defense)
+
+    for(j in columns){
+    #Expand this DF to include OD for other stats
+      OD <- calculateOD(dataToGraph(data,i,j))
+      offense <-OD$offense
+      defense <- OD$defense
+      
+      week = rep(i,length(offense))
+      teams <- names(offense[,1])
+      w <- data.frame(week,teams,offense,defense)
+      
+      weeklyDF <- weeklyDF %>%
+        left_join(w,by= c("week"="week","teams" = "teams"))
+    }
+    
+    teamData <- teamData %>%
+      bind_rows(weeklyDF)
+  }
+  
+  colnames(teamData) <- c("Week",'Team',"O_Points","D_Points","O_Net Rush","D_Net Rush","O_Avg Rush","D_Avg Rush","O_Net Pass",'D_Net Pass','O_Avg Pass','D_Avg Pass')
+  
+  return(teamData)
+}
+
+
+# OD_2016 <-createODDF(game_stats_2016)
+# View(OD_2016)
+
+OD_2017 <-calculateOD(dataToGraph(simplify(game_stats_2017),20,4))
+View(OD_2017)
+```
+```{r}
+# g = dataToGraph(data_2016,23,6)
+# Adj = as.matrix(get.adjacency(g,attr='weight'))
+```
+
+
+
+```{r}
+createOffensiveData <- function(gameData){
+  
+  homeData = gameData[,c(1:10)]
+  awayData = gameData[,c(1:2,11:18)]
+  
+  home_names = c(colnames(homeData)[1:2],unlist(strsplit(colnames(homeData[3:length(colnames(homeData))]), split='_', fixed=TRUE))[seq(2,16,by=2)])
+  colnames(homeData) = home_names
+  colnames(awayData) = home_names
+  
+  modifiedData = bind_rows(awayData,homeData)
+  
+  modifiedData <- modifiedData %>%
+    group_by(Team) %>%
+    arrange(Team,Week) %>%
+    mutate(`cumavg rush` = cummean(`Avg Rush Gain`)) %>%
+    mutate(`cumavg pass` = cummean(`Pass Gain/Att`)) %>%
+    mutate(`cumavg total rush` = cummean(`Net Yards Rushing`)) %>%
+    mutate(`cumavg total pass` = cummean(`Net Yards Passing`)) %>%
+    mutate('Next Week' = `Week`+1 )
+  
+  modifiedData <- modifiedData[,-c(4:10)]
+  modifiedData <- modifiedData[,c(8,3:7,1:2)]
+  modifiedData <-modifiedData[,-c(7:8)]
+  
+  colnames(modifiedData)[3:6] = paste0("Offense ", colnames(modifiedData)[3:6])
+  
+  
+  
+  #Missing infrormation for after the team's bye week
+  for(i in 2:nrow(modifiedData))
+    if(modifiedData$`Next Week`[i-1] + 2 == modifiedData$`Next Week`[i]){
+      newRow = modifiedData[i-1,]
+      newRow$`Next Week` = modifiedData[i-1,]$`Next Week` +1
+      
+      modifiedData <- bind_rows(modifiedData,newRow)
+    }
+  
+  modifiedData <- modifiedData %>% 
+    arrange(Team,`Next Week`)
+
+  
+  
+  return(modifiedData)
+}
+```
+```{r}
+createDefensiveData <- function(gameData){
+  homeData = gameData[,c(1:3,12:18)]
+  awayData = gameData[,c(1:2,11,4:10)]
+  
+  home_names = c(colnames(homeData)[1:2],unlist(strsplit(colnames(homeData[3:length(colnames(homeData))]), split='_', fixed=TRUE))[seq(2,16,by=2)])
+  colnames(homeData) = home_names
+  colnames(awayData) = home_names
+
+  modifiedData = bind_rows(awayData,homeData)
+
+  modifiedData <- modifiedData %>%
+    group_by(Team) %>%
+    arrange(Team,Week) %>%
+    mutate(`cumavg rush` = cummean(`Avg Rush Gain`)) %>%
+    mutate(`cumavg pass` = cummean(`Pass Gain/Att`)) %>%
+    mutate(`cumavg total rush` = cummean(`Net Yards Rushing`)) %>%
+    mutate(`cumavg total pass` = cummean(`Net Yards Passing`)) %>%
+    mutate('Next Week' = `Week`+1 )
+
+  modifiedData <- modifiedData[,-c(4:10)]
+  modifiedData <- modifiedData[,c(8,3:7,1:2)]
+  modifiedData <-modifiedData[,-c(7:8)]
+  
+  colnames(modifiedData)[3:6] = paste0("Defense ", colnames(modifiedData)[3:6])
+
+
+
+  #Missing infrormation for after the team's bye week
+  for(i in 2:nrow(modifiedData))
+    if(modifiedData$`Next Week`[i-1] + 2 == modifiedData$`Next Week`[i]){
+      newRow = modifiedData[i-1,]
+      newRow$`Next Week` = modifiedData[i-1,]$`Next Week` +1
+
+      modifiedData <- bind_rows(modifiedData,newRow)
+    }
+
+  modifiedData <- modifiedData %>%
+    arrange(Team,`Next Week`)
+
+  
+  
+  return(modifiedData)
+}
+
+createTeamData <- function(gameData){
+  defenseData <- createDefensiveData(gameData)
+  offenseData <- createOffensiveData(gameData)
+  
+  teamData <- offenseData %>%
+    left_join(defenseData, by= c("Next Week"="Next Week","Team" = "Team"))
+  
+  return(teamData)
+
+
+}
+
+```
+
+
+```{r}
+createModelDF <- function(rawDataframe, prevYearRawDataframe){
+  game_data <- simplify(rawDataframe)
+  
+
+  
+  OD_dataframe <- createODDF(rawDataframe) %>%
+      select(Week,Team,contains("O_"),contains("D_"))
+  
+  prev_OD_dataframe <- createODDF(prevYearRawDataframe) %>%
+    select(Week,Team,contains("Points")) %>%
+    filter(Week>20) %>%
+    rename(`O_Points_Last_Year` = O_Points) %>%
+    rename(`D_Points_Last_Year` = D_Points) %>%
+    select(-Week)    
+
+  
+  
+  OD_dataframe$Team = as.character(OD_dataframe$Team)
+  prev_OD_dataframe$Team = as.character(prev_OD_dataframe$Team)
+  
+  #Account for team name changes
+  
+  
+  oldTeam = c("St. Louis","Los Angeles","San Diego")
+  newTeam = c("Los Angeles","LA Rams","LA Chargers")
+  for(i in 1:length(oldTeam)){
+    game_data[ game_data == oldTeam[i] ] <- newTeam[i]
+    OD_dataframe[OD_dataframe==oldTeam[i]]<- newTeam[i]
+    prev_OD_dataframe[prev_OD_dataframe==oldTeam[i]]<-newTeam[i]
+  }
+  
+  
+  
+  game_id = data.frame(1:nrow(game_data))
+  
+  team_names <- game_data %>%
+    group_by(Home_Team) %>%
+    summarise() 
+  
+  colnames(team_names)<- "Team"
+  
+  team_id = data.frame(1:nrow(team_names))
+  
+  team_ids <- bind_cols(team_names,team_id)
+  home_ids <- team_ids 
+  colnames(home_ids)[2] = "Home_id"
+  away_ids <- team_ids
+  colnames(away_ids)[2] = "Away_id"
+  game_data <- game_data %>%
+    left_join(home_ids,by = c("Home_Team" = "Team")) %>%
+    left_join(away_ids,by = c("Away_Team"= "Team")) %>% 
+    select(Date,Week,Home_Team,Home_id,Home_Points,Away_Team,Away_id,Away_Points)
+  
+
+  
+
+  
+  
+  H_data <- OD_dataframe 
+  A_data <- OD_dataframe
+  
+  H_prev <- prev_OD_dataframe
+  A_prev <- prev_OD_dataframe
+  
+  colnames(H_data)[1:ncol(H_data)] <- paste0("Home_",colnames(H_data)[1:ncol(H_data)])
+  colnames(A_data)[1:ncol(A_data)] <- paste0("Away_",colnames(A_data)[1:ncol(A_data)])
+  
+  colnames(H_prev)[1:ncol(H_prev)] <- paste0("Home_",colnames(H_prev)[1:ncol(H_prev)])
+  colnames(A_prev)[1:ncol(A_prev)] <- paste0("Away_",colnames(A_prev)[1:ncol(A_prev)])
+  
+  
+  game_data <- game_data %>%
+    bind_cols(game_id) %>%
+    left_join(H_data,by = c("Week" = "Home_Week", "Home_Team"="Home_Team")) %>%
+    left_join(H_prev,by = c("Home_Team"="Home_Team")) %>%
+    left_join(A_data,by = c("Week" = "Away_Week", "Away_Team"="Away_Team")) %>%
+    left_join(A_prev,by = c("Away_Team"="Away_Team")) %>%
+    select(Date,Week,contains("Home_"),contains("Away_")) %>%
+    filter(Week >3) %>%
+    arrange(Week,Home_Team)
+  
+  binnedWeeks <- rep(0, nrow(game_data))
+  weeks <- game_data$Week
+  # for(i in 1:length(weeks)){
+  #   if(weeks[i]>=1 & weeks[i]<=5){
+  #     binnedWeeks[i]=1
+  #   } else if(weeks[i]>=6 & weeks[i]<=10){
+  #     binnedWeeks[i] = 2
+  #   } else if(weeks[i]>=11 & weeks[i] <=14){
+  #     binnedWeeks[i] = 3
+  #   } else{
+  #     binnedWeeks[i] = 4
+  #   }
+  # }
+  
+  for(i in 1:length(weeks)){
+    if(weeks[i]>=1 & weeks[i]<=5){
+      binnedWeeks[i] = 1
+    } else if(weeks[i]>=5 & weeks[i] <=10){
+      binnedWeeks[i] = 2
+    } else{
+      binnedWeeks[i] = 3
+    }
+  }
+  binnedWeeks <-data.frame(binnedWeeks)
+  colnames(binnedWeeks)<- "binnedWeeks"
+  
+  game_data <- bind_cols(game_data,binnedWeeks)
+  
+  return(game_data)
+}
+
+
+# View(createModelDF(game_stats_2016,game_stats_2015))
+# View(createModelDF(game_stats_2015,game_stats_2014))
+
+
+```
+```{r}
+
+od2017 <-createODDF(game_stats_2017)
+# View(od2017)
+```
+
+
+
+write.csv(modelDF2016,"modelData2016.csv")
+```{r}
+createIDDF <- function(rawDataframe, prevYearRawDataframe){
+  game_data <- simplify(rawDataframe)
+
+  oldTeam = c("St. Louis","Los Angeles","San Diego")
+  newTeam = c("Los Angeles","LA Rams","LA Chargers")
+  for(i in 1:length(oldTeam)){
+    game_data[ game_data == oldTeam[i] ] <- newTeam[i]
+  }
+  
+  game_id = data.frame(1:nrow(game_data))
+  
+  team_names <- game_data %>%
+    group_by(Home_Team) %>%
+    summarise() 
+  
+  colnames(team_names)<- "Team"
+  
+  team_id = data.frame(1:nrow(team_names))
+  
+  team_ids <- bind_cols(team_names,team_id)
+  
+  colnames(team_ids)[2]<-"Team_ID"
+  return(team_ids)
+}
+teamIDs2017 <- createIDDF(game_stats_2017,game_stats_2016)
+View(teamIDs2017)
+
+
+```
+
+```{r}
+# data_2014 <-simplify(game_stats_2016)
+# data_2015 <-simplify(game_stats_2016)
+# data_2016 <-simplify(game_stats_2016)
+# data_2017 <-simplify(game_stats_2016)
+
+# modelDF2011 <- createModelDF(game_stats_2011,game_stats_2010)
+# modelDF2012 <- createModelDF(game_stats_2012,game_stats_2011)
+# modelDF2013 <- createModelDF(game_stats_2013,game_stats_2012)
+# modelDF2014 <- createModelDF(game_stats_2014,game_stats_2013)
+# modelDF2015 <- createModelDF(game_stats_2015,game_stats_2014)
+# modelDF2016 <- createModelDF(game_stats_2016,game_stats_2015)
+modelDF2017 <- createModelDF(game_stats_2017,game_stats_2016)
+```
+
+```
+#Data filtered to later weeks to avoid noise
+
+modelData <-modelDF2015 %>% 
+  bind_rows(modelDF2014) %>%
+  bind_rows(modelDF2013) %>%
+  bind_rows(modelDF2012) %>%
+  bind_rows(modelDF2011)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+#TESTING LINEAR MODELS -- NOT IMPORTANT
+```
+model <- lm(Home_Points ~ Home_O_Points + Away_D_Points + `Home_O_Net Rush` + `Home_O_Net Pass` + `Away_D_Net Rush` +`Away_D_Net Pass` ,data = modelData)
+summary(model)
+```
+```
+model <- lm(Home_Points - Away_Points ~ (Home_O_Points -  Away_D_Points) + (Away_O_Points - Home_D_Points) + (`Home_O_Net Rush`-`Away_D_Net Rush`) + (`Home_O_Net Pass`-`Away_D_Net Pass`) ,data = modelData)
+summary(model)
+```
+
+
+
+
+```
+model <- lm(Home_Points + Away_Points ~ (Home_O_Points -  Away_D_Points) + (Away_O_Points - Home_D_Points) ,data = modelData)
+summary(model)
+```
+
+```
+model <- lm(Home_Points - Away_Points ~ (Home_O_Points -  Away_D_Points) + (Away_O_Points - Home_D_Points) + (`Home_O_Avg Rush`-`Away_D_Avg Rush`) + (`Home_O_Net Pass`-`Away_D_Net Pass`) ,data = modelData)
+summary(model)
+```
+
+
+
+
+
+
+```
+model <- lm(Home_Points - Away_Points ~ (Home_O_Points -  Away_D_Points) + (Away_O_Points - Home_D_Points),data = modelData)
+summary(model)
+```
+
+
+
+
+
+```
+model <- lm(Home_Points - Away_Points ~ (Home_O_Points -  Away_D_Points) + (Away_O_Points - Home_D_Points) + (Home_O_Points_Last_Year - Away_D_Points_Last_Year) + (Away_O_Points_Last_Year - Home_D_Points_Last_Year),data = modelData)
+summary(model)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

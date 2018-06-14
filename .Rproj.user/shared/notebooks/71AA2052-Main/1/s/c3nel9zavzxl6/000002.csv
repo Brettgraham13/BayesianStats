@@ -1,0 +1,4 @@
+"0","CleanData_2017 <- data.frame(Date = data_2017$Date, Week = data_2017$Week, Home_Team = data_2017$Home_Team, Home_Points = HomePoints, HomeNetRushYards = HomeNetRushYards, Home_Rush_Plays = HomeRushPlays, Home_Average_Rush_Gain = HomeAvgRushGain, Home_Net_Passing_Yards = HomeNetPassYards, Home_Pass_Attempts = HomePassAtt, Home_Avg_YardsPerPassAtt = HomeAvgPassPerAtt, Away_Team = data_2017$Away_Team, Away_Points = AwayPoints, AwayNetRushYards = AwayNetRushYards, Away_Rush_Plays = AwayRushPlays, Away_Average_Rush_Gain = AwayAvgRushGain, Away_Net_Passing_Yards = AwayNetPassYards, Away_Pass_Attempts = AwayPassAtt, Away_Avg_YardsPerPassAtt = AwayAvgPassPerAtt)"
+"2","Error in data.frame(Date = data_2017$Date, Week = data_2017$Week, Home_Team = data_2017$Home_Team,  : 
+  arguments imply differing number of rows: 159, 0
+"

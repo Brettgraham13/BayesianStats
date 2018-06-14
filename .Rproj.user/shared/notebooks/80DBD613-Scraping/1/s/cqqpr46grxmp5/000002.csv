@@ -1,0 +1,3 @@
+"0","date17_html <- html_nodes(webpage2017,'td:nth-child(1) .hidden-xs')"
+"0","date17_data <- html_text(date17_html)"
+"0","date_2017 <- as.Date(date17_data,""%m/%d/%Y"")"

@@ -1,0 +1,3 @@
+"0","ggplot(dallas, aes(x= Week,y = `Point Differential`,color = Result)) +"
+"0","    geom_line() + geom_point()+ ggtitle(""Dallas"")+ "
+"0","    scale_color_discrete(labels=c(""Score"",""Prediction""))"
